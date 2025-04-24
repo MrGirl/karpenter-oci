@@ -16,6 +16,8 @@ package cloudprovider
 
 import (
 	"context"
+	"github.com/awslabs/operatorpkg/object"
+	"github.com/awslabs/operatorpkg/status"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -26,20 +28,21 @@ import (
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -59,7 +62,7 @@ func TestProvider(t *testing.T) {
 }
 
 var _ = ginkgo.BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
@@ -68,8 +71,8 @@ var _ = ginkgo.BeforeSuite(func() {
 	recorder = events.NewRecorder(&record.FakeRecorder{})
 	cloudProvider = New(ociEnv.InstanceTypesProvider, ociEnv.InstanceProvider, recorder,
 		env.Client, ociEnv.AMIProvider)
-	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster)
+	cluster = state.NewCluster(fakeClock, env.Client)
+	prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
 })
 
 var _ = ginkgo.AfterSuite(func() {
@@ -79,7 +82,9 @@ var _ = ginkgo.AfterSuite(func() {
 
 var _ = ginkgo.BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	option := test.Options()
+	option.AvailableDomains = []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}
+	ctx = options.ToContext(ctx, option)
 
 	cluster.Reset()
 	ociEnv.Reset()
@@ -88,43 +93,75 @@ var _ = ginkgo.BeforeEach(func() {
 })
 
 var _ = ginkgo.AfterEach(func() {
-	test.ExpectCleanedUp(ctx, env.Client)
+	ExpectCleanedUp(ctx, env.Client)
 })
 
 var _ = Describe("CloudProvider", func() {
 	var nodeClass *v1alpha1.OciNodeClass
-	var nodePool *corev1beta1.NodePool
-	var nodeClaim *corev1beta1.NodeClaim
+	var nodePool *karpv1.NodePool
+	var nodeClaim *karpv1.NodeClaim
 	var _ = BeforeEach(func() {
 		nodeClass = test.OciNodeClass()
-		nodePool = coretest.NodePool(corev1beta1.NodePool{
-			Spec: corev1beta1.NodePoolSpec{
-				Template: corev1beta1.NodeClaimTemplate{
-					Spec: corev1beta1.NodeClaimSpec{
-						NodeClassRef: &corev1beta1.NodeClassReference{
-							Name: nodeClass.Name,
+		nodeClass.StatusConditions().SetTrue(status.ConditionReady)
+		nodePool = coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						NodeClassRef: &karpv1.NodeClassReference{
+							Group: object.GVK(nodeClass).Group,
+							Kind:  object.GVK(nodeClass).Kind,
+							Name:  nodeClass.Name,
 						},
-						Requirements: []corev1beta1.NodeSelectorRequirementWithMinValues{
-							{NodeSelectorRequirement: v1.NodeSelectorRequirement{Key: corev1beta1.CapacityTypeLabelKey, Operator: v1.NodeSelectorOpIn, Values: []string{corev1beta1.CapacityTypeOnDemand}}},
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+							{NodeSelectorRequirement: v1.NodeSelectorRequirement{Key: karpv1.CapacityTypeLabelKey, Operator: v1.NodeSelectorOpIn, Values: []string{karpv1.CapacityTypeOnDemand}}},
 						},
 					},
 				},
 			},
 		})
-		nodeClaim = coretest.NodeClaim(corev1beta1.NodeClaim{
+		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{corev1beta1.NodePoolLabelKey: nodePool.Name},
+				Labels: map[string]string{karpv1.NodePoolLabelKey: nodePool.Name},
 			},
-			Spec: corev1beta1.NodeClaimSpec{
-				NodeClassRef: &corev1beta1.NodeClassReference{
-					Name: nodeClass.Name,
+			Spec: karpv1.NodeClaimSpec{
+				NodeClassRef: &karpv1.NodeClassReference{
+					Group: object.GVK(nodeClass).Group,
+					Kind:  object.GVK(nodeClass).Kind,
+					Name:  nodeClass.Name,
+				},
+				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      karpv1.CapacityTypeLabelKey,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{karpv1.CapacityTypeOnDemand},
+						},
+					},
 				},
 			},
 		})
+		_, err := ociEnv.SubnetProvider.List(ctx, nodeClass) // Hydrate the subnet cache
+		ociEnv.InstanceTypeCache.Flush()
+		ociEnv.UnavailableOfferingsCache.Flush()
+		Expect(err).To(BeNil())
+	})
+	It("should not proceed with instance creation if NodeClass is unknown", func() {
+		nodeClass.StatusConditions().SetUnknown(status.ConditionReady)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		_, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(HaveOccurred())
+		Expect(cloudprovider.IsNodeClassNotReadyError(err)).To(BeFalse())
+	})
+	It("should return NodeClassNotReady error on creation if NodeClass is not ready", func() {
+		nodeClass.StatusConditions().SetFalse(status.ConditionReady, "NodeClassNotReady", "NodeClass not ready")
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		_, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(HaveOccurred())
+		Expect(cloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
 	})
 	It("should return an ICE error when there are no instance types to launch", func() {
 		// Specify no instance types and expect to receive a capacity error
-		nodeClaim.Spec.Requirements = []corev1beta1.NodeSelectorRequirementWithMinValues{
+		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
 				NodeSelectorRequirement: v1.NodeSelectorRequirement{
 					Key:      v1.LabelInstanceTypeStable,
@@ -133,37 +170,33 @@ var _ = Describe("CloudProvider", func() {
 				},
 			},
 		}
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(cloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
 		Expect(cloudProviderNodeClaim).To(BeNil())
 	})
 	It("should set ImageID in the status field of the nodeClaim", func() {
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(err).To(BeNil())
 		Expect(cloudProviderNodeClaim).ToNot(BeNil())
 		Expect(cloudProviderNodeClaim.Status.ImageID).ToNot(BeEmpty())
 	})
 	It("should return NodeClass Hash on the nodeClaim", func() {
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(err).To(BeNil())
 		Expect(cloudProviderNodeClaim).ToNot(BeNil())
 		_, ok := cloudProviderNodeClaim.ObjectMeta.Annotations[v1alpha1.AnnotationOciNodeClassHash]
 		Expect(ok).To(BeTrue())
 	})
-	//Context("instance Tags", func() {
-	//	tags := map[string]string{"test_key": "111"}
-	//	It("should set context on the CreateFleet request if specified on the NodePool", func() {
-	//		nodeClass.Spec.Tags = tags
-	//		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
-	//		pod := coretest.UnschedulablePod()
-	//		test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-	//		test.ExpectScheduled(ctx, env.Client, pod)
-	//		Expect(ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Len()).To(Equal(1))
-	//		createFleetInput := ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Pop()
-	//		Expect(createFleetInput.FreeformTags["test_key"]).To(Equal("111"))
-	//	})
-	//})
+	It("should return NodeClass Hash Version on the nodeClaim", func() {
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(BeNil())
+		Expect(cloudProviderNodeClaim).ToNot(BeNil())
+		v, ok := cloudProviderNodeClaim.ObjectMeta.Annotations[v1alpha1.AnnotationOciNodeClassHashVersion]
+		Expect(ok).To(BeTrue())
+		Expect(v).To(Equal(v1alpha1.OciNodeClassHashVersion))
+	})
 })

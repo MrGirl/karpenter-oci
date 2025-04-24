@@ -16,8 +16,8 @@ package imagefamily
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 )
 
 type UbuntuLinux struct {
@@ -25,7 +25,7 @@ type UbuntuLinux struct {
 	*Options
 }
 
-func (a UbuntuLinux) UserData(kubeletConfig *corev1beta1.KubeletConfiguration, taints []v1.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper {
+func (a UbuntuLinux) UserData(kubeletConfig *v1alpha1.KubeletConfiguration, taints []v1.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper {
 	return bootstrap.Custom{
 		Options: bootstrap.Options{
 			ClusterName:      a.Options.ClusterName,

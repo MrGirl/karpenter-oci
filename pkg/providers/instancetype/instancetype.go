@@ -22,13 +22,15 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"karpenter-oci/pkg/apis/v1alpha1"
 	ocicache "karpenter-oci/pkg/cache"
 	"karpenter-oci/pkg/operator/oci/api"
 	"karpenter-oci/pkg/operator/options"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,46 +62,48 @@ func NewProvider(region string, compClient api.ComputeClient, cache *cache.Cache
 	return &Provider{region: region, compClient: compClient, cache: cache, unavailableOfferings: unavailableOfferings}
 }
 
-func (p *Provider) List(ctx context.Context, kc *corev1beta1.KubeletConfiguration, nodeClass *v1alpha1.OciNodeClass) ([]*cloudprovider.InstanceType, error) {
+func (p *Provider) List(ctx context.Context, kc *v1alpha1.KubeletConfiguration, nodeClass *v1alpha1.OciNodeClass) ([]*cloudprovider.InstanceType, error) {
 
-	wrapShapes, err := p.ListInstanceType(ctx, nodeClass)
+	wrapShapes, err := p.ListInstanceType(ctx)
 	if err != nil {
 		return nil, err
 	}
 	instanceTypes := make([]*cloudprovider.InstanceType, 0)
 	for _, wrapped := range wrapShapes {
 		// todo offers
-		instanceTypes = append(instanceTypes, NewInstanceType(ctx, wrapped, nodeClass, kc, p.region, wrapped.AvailableDomains, p.CreateOfferings(*wrapped.Shape.Shape, sets.New(wrapped.AvailableDomains...), wrapped.CalcCpu)))
+		instanceTypes = append(instanceTypes, NewInstanceType(ctx, wrapped, nodeClass, kc, p.region, wrapped.AvailableDomains, p.CreateOfferings(*wrapped.Shape.Shape, sets.New(wrapped.AvailableDomains...), wrapped.CalcCpu, wrapped.CalMemInGBs)))
 	}
 	return instanceTypes, nil
 
 }
 
-func (p *Provider) CreateOfferings(shape string, zones sets.Set[string], oCpu int64) []cloudprovider.Offering {
+func (p *Provider) CreateOfferings(shape string, zones sets.Set[string], oCpu int64, memory int64) []cloudprovider.Offering {
 	var offerings []cloudprovider.Offering
 	// only on-demand support
 	for zone := range zones {
 		// exclude any offerings that have recently seen an insufficient capacity error
-		isUnavailable := p.unavailableOfferings.IsUnavailable(shape, zone, corev1beta1.CapacityTypeOnDemand)
+		isUnavailable := p.unavailableOfferings.IsUnavailable(shape, zone, v1.CapacityTypeOnDemand)
 		// todo support pricing calculate
-		price := 1.0
+		price := 8.0
 		offerings = append(offerings, cloudprovider.Offering{
-			Zone:         zone,
-			CapacityType: corev1beta1.CapacityTypeOnDemand,
-			Price:        price * float64(oCpu),
-			Available:    !isUnavailable,
+			Requirements: scheduling.NewRequirements(
+				scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
+				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
+			),
+			Price:     price*float64(oCpu) + float64(memory),
+			Available: !isUnavailable,
 		})
 		// metric
 		instanceTypeOfferingAvailable.With(prometheus.Labels{
 			instanceTypeLabel: shape,
-			capacityTypeLabel: corev1beta1.CapacityTypeOnDemand,
+			capacityTypeLabel: v1.CapacityTypeOnDemand,
 			zoneLabel:         zone,
 		}).Set(float64(lo.Ternary(!isUnavailable, 1, 0)))
 	}
 	return offerings
 }
 
-func (p *Provider) ListInstanceType(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (map[string]*WrapShape, error) {
+func (p *Provider) ListInstanceType(ctx context.Context) (map[string]*WrapShape, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -107,7 +111,7 @@ func (p *Provider) ListInstanceType(ctx context.Context, nodeClass *v1alpha1.Oci
 		return cached.(map[string]*WrapShape), nil
 	}
 	adShapesMap := make(map[string][]*WrapShape, 0)
-	for _, availableDomain := range nodeClass.Spec.InstanceShapeAds {
+	for _, availableDomain := range options.FromContext(ctx).AvailableDomains {
 		shapes := make([]core.Shape, 0)
 		nextPage := "0"
 		for nextPage != "" {
@@ -181,24 +185,33 @@ func toWrapShape(ctx context.Context, shapes []core.Shape, ad string) []*WrapSha
 }
 
 func splitFlexCpuMem(ctx context.Context, shape core.Shape, ad string) []*WrapShape {
-	flexCpuMemRatio := options.FromContext(ctx).FlexCpuMemRatio
+	flexCpuMemRatios := strings.Split(options.FromContext(ctx).FlexCpuMemRatios, ",")
 	constrainCpus := strings.Split(options.FromContext(ctx).FlexCpuConstrainList, ",")
 	wrapShapes := make([]*WrapShape, 0)
 	for i := 0; i < len(constrainCpus); i++ {
-		cpus, _ := strconv.Atoi(constrainCpus[i])
-		memInGBs := cpus * flexCpuMemRatio
-		if cpus < int(*shape.OcpuOptions.Min*2) || memInGBs < int(*shape.MemoryOptions.MinInGBs) {
-			continue
+		for _, ratio := range flexCpuMemRatios {
+			ratioInt, covErr := strconv.Atoi(ratio)
+			if covErr != nil {
+				continue
+			}
+			cpus, covErr := strconv.Atoi(constrainCpus[i])
+			if covErr != nil {
+				continue
+			}
+			memInGBs := cpus * 2 * ratioInt
+			if cpus < int(*shape.OcpuOptions.Min) || memInGBs < int(*shape.MemoryOptions.MinInGBs) {
+				continue
+			}
+			if cpus > int(*shape.OcpuOptions.Max) || memInGBs > int(*shape.MemoryOptions.MaxInGBs) {
+				continue
+			}
+			wrapShapes = append(wrapShapes, &WrapShape{
+				Shape:            shape,
+				CalcCpu:          int64(cpus) * 2,
+				CalMemInGBs:      int64(memInGBs),
+				AvailableDomains: []string{ad},
+			})
 		}
-		if cpus > int(*shape.OcpuOptions.Max*2) || memInGBs > int(*shape.MemoryOptions.MaxInGBs) {
-			break
-		}
-		wrapShapes = append(wrapShapes, &WrapShape{
-			Shape:            shape,
-			CalcCpu:          int64(cpus) * 2,
-			CalMemInGBs:      int64(memInGBs),
-			AvailableDomains: []string{ad},
-		})
 	}
 	return wrapShapes
 }

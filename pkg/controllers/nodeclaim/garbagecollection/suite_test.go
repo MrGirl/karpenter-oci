@@ -16,6 +16,7 @@ package garbagecollection_test
 
 import (
 	"context"
+	"github.com/awslabs/operatorpkg/object"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	v1 "k8s.io/api/core/v1"
@@ -26,29 +27,28 @@ import (
 	"karpenter-oci/pkg/fake"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
+	"karpenter-oci/pkg/utils"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sync"
 	"testing"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"k8s.io/client-go/tools/record"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/events"
-	"sigs.k8s.io/karpenter/pkg/operator/controller"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
 var ociEnv *test.Environment
 var env *coretest.Environment
-var garbageCollectionController controller.Controller
+var garbageCollectionController *garbagecollection.Controller
 var cloudProvider *cloudprovider.CloudProvider
 
 func TestGarbageCollection(t *testing.T) {
@@ -59,7 +59,7 @@ func TestGarbageCollection(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	ctx = options.ToContext(ctx, test.Options())
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...))
 	ociEnv = test.NewEnvironment(ctx, env)
 	cloudProvider = cloudprovider.New(ociEnv.InstanceTypesProvider, ociEnv.InstanceProvider, events.NewRecorder(&record.FakeRecorder{}),
 		env.Client, ociEnv.AMIProvider)
@@ -83,12 +83,14 @@ var _ = Describe("GarbageCollection", func() {
 		instanceID := fake.InstanceID()
 		providerID = instanceID
 		nodeClass = test.OciNodeClass()
-		nodePool := coretest.NodePool(corev1beta1.NodePool{
-			Spec: corev1beta1.NodePoolSpec{
-				Template: corev1beta1.NodeClaimTemplate{
-					Spec: corev1beta1.NodeClaimSpec{
-						NodeClassRef: &corev1beta1.NodeClassReference{
-							Name: nodeClass.Name,
+		nodePool := coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						NodeClassRef: &karpv1.NodeClassReference{
+							Group: object.GVK(nodeClass).Group,
+							Kind:  object.GVK(nodeClass).Kind,
+							Name:  nodeClass.Name,
 						},
 					},
 				},
@@ -104,14 +106,14 @@ var _ = Describe("GarbageCollection", func() {
 			SourceDetails: core.InstanceSourceViaImageDetails{
 				ImageId: common.String("ocid1.image.oc1.iad.aaaaaaaa"),
 			},
-			FreeformTags: map[string]string{
-				corev1beta1.NodePoolLabelKey:       nodePool.Name,
-				corev1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
-				v1alpha1.LabelNodeClass:            nodeClass.Name},
+			DefinedTags: map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: {
+				utils.SafeTagKey(karpv1.NodePoolLabelKey):         nodePool.Name,
+				utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey): options.FromContext(ctx).ClusterName,
+				utils.SafeTagKey(v1alpha1.LabelNodeClass):         nodeClass.Name}},
 		}
 	})
 	AfterEach(func() {
-		test.ExpectCleanedUp(ctx, env.Client)
+		ExpectCleanedUp(ctx, env.Client)
 	})
 
 	It("should delete an instance if there is no NodeClaim owner", func() {
@@ -119,7 +121,7 @@ var _ = Describe("GarbageCollection", func() {
 		instance.TimeCreated = &common.SDKTime{Time: time.Now().Add(-time.Minute)}
 		ociEnv.CmpCli.Instances.Store(*instance.Id, instance)
 
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 		_, err := cloudProvider.Get(ctx, providerID)
 		Expect(err).To(HaveOccurred())
 		Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
@@ -132,14 +134,14 @@ var _ = Describe("GarbageCollection", func() {
 		node := coretest.Node(coretest.NodeOptions{
 			ProviderID: providerID,
 		})
-		test.ExpectApplied(ctx, env.Client, node)
+		ExpectApplied(ctx, env.Client, node)
 
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 		_, err := cloudProvider.Get(ctx, providerID)
 		Expect(err).To(HaveOccurred())
 		Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
 
-		test.ExpectNotFound(ctx, env.Client, node)
+		ExpectNotFound(ctx, env.Client, node)
 	})
 	It("should delete many instances if they all don't have NodeClaim owners", func() {
 		// Generate 100 instances that have different instanceIDs
@@ -157,16 +159,16 @@ var _ = Describe("GarbageCollection", func() {
 					SourceDetails: core.InstanceSourceViaImageDetails{
 						ImageId: common.String("ocid1.image.oc1.iad.aaaaaaaa"),
 					},
-					FreeformTags: map[string]string{
-						corev1beta1.NodePoolLabelKey:       "default",
-						corev1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
-						v1alpha1.LabelNodeClass:            "default"},
+					DefinedTags: map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: {
+						utils.SafeTagKey(karpv1.NodePoolLabelKey):         "default",
+						utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey): options.FromContext(ctx).ClusterName,
+						utils.SafeTagKey(v1alpha1.LabelNodeClass):         "default"}},
 					TimeCreated: &common.SDKTime{Time: time.Now().Add(-time.Minute)},
 				},
 			)
 			ids = append(ids, instanceID)
 		}
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 
 		wg := sync.WaitGroup{}
 		for _, id := range ids {
@@ -185,7 +187,7 @@ var _ = Describe("GarbageCollection", func() {
 	It("should not delete all instances if they all have NodeClaim owners", func() {
 		// Generate 100 instances that have different instanceIDs
 		var ids []string
-		var nodeClaims []*corev1beta1.NodeClaim
+		var nodeClaims []*karpv1.NodeClaim
 		for i := 0; i < 100; i++ {
 			instanceID := fake.InstanceID()
 			ociEnv.CmpCli.Instances.Store(
@@ -199,26 +201,29 @@ var _ = Describe("GarbageCollection", func() {
 					SourceDetails: core.InstanceSourceViaImageDetails{
 						ImageId: common.String("ocid1.image.oc1.iad.aaaaaaaa"),
 					},
-					FreeformTags: map[string]string{
-						corev1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName},
+
+					DefinedTags: map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: {
+						utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey): options.FromContext(ctx).ClusterName}},
 					TimeCreated: &common.SDKTime{Time: time.Now().Add(-time.Minute)},
 				},
 			)
-			nodeClaim := coretest.NodeClaim(corev1beta1.NodeClaim{
-				Spec: corev1beta1.NodeClaimSpec{
-					NodeClassRef: &corev1beta1.NodeClassReference{
-						Name: nodeClass.Name,
+			nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+				Spec: karpv1.NodeClaimSpec{
+					NodeClassRef: &karpv1.NodeClassReference{
+						Group: object.GVK(nodeClass).Group,
+						Kind:  object.GVK(nodeClass).Kind,
+						Name:  nodeClass.Name,
 					},
 				},
-				Status: corev1beta1.NodeClaimStatus{
+				Status: karpv1.NodeClaimStatus{
 					ProviderID: instanceID,
 				},
 			})
-			test.ExpectApplied(ctx, env.Client, nodeClaim)
+			ExpectApplied(ctx, env.Client, nodeClaim)
 			nodeClaims = append(nodeClaims, nodeClaim)
 			ids = append(ids, instanceID)
 		}
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 
 		wg := sync.WaitGroup{}
 		for _, id := range ids {
@@ -234,7 +239,7 @@ var _ = Describe("GarbageCollection", func() {
 		wg.Wait()
 
 		for _, nodeClaim := range nodeClaims {
-			test.ExpectExists(ctx, env.Client, nodeClaim)
+			ExpectExists(ctx, env.Client, nodeClaim)
 		}
 	})
 	It("should not delete an instance if it is within the NodeClaim resolution window (1m)", func() {
@@ -242,19 +247,19 @@ var _ = Describe("GarbageCollection", func() {
 		instance.TimeCreated = &common.SDKTime{Time: time.Now()}
 		ociEnv.CmpCli.Instances.Store(*instance.Id, instance)
 
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 		_, err := cloudProvider.Get(ctx, providerID)
 		Expect(err).NotTo(HaveOccurred())
 	})
 	It("should not delete an instance if it was not launched by a NodeClaim", func() {
 		// Remove the "karpenter.sh/managed-by" tag (this isn't launched by a machine)
-		delete(instance.FreeformTags, corev1beta1.ManagedByAnnotationKey)
+		delete(instance.DefinedTags[options.FromContext(ctx).TagNamespace], utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey))
 
 		// Launch time was 1m ago
 		instance.TimeCreated = &common.SDKTime{Time: time.Now().Add(-time.Minute)}
 		ociEnv.CmpCli.Instances.Store(*instance.Id, instance)
 
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 		_, err := cloudProvider.Get(ctx, providerID)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -263,25 +268,27 @@ var _ = Describe("GarbageCollection", func() {
 		instance.TimeCreated = &common.SDKTime{Time: time.Now().Add(-time.Minute)}
 		ociEnv.CmpCli.Instances.Store(*instance.Id, instance)
 
-		nodeClaim := coretest.NodeClaim(corev1beta1.NodeClaim{
-			Spec: corev1beta1.NodeClaimSpec{
-				NodeClassRef: &corev1beta1.NodeClassReference{
-					Name: nodeClass.Name,
+		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+			Spec: karpv1.NodeClaimSpec{
+				NodeClassRef: &karpv1.NodeClassReference{
+					Group: object.GVK(nodeClass).Group,
+					Kind:  object.GVK(nodeClass).Kind,
+					Name:  nodeClass.Name,
 				},
 			},
-			Status: corev1beta1.NodeClaimStatus{
+			Status: karpv1.NodeClaimStatus{
 				ProviderID: providerID,
 			},
 		})
 		node := coretest.Node(coretest.NodeOptions{
 			ProviderID: providerID,
 		})
-		test.ExpectApplied(ctx, env.Client, nodeClaim, node)
+		ExpectApplied(ctx, env.Client, nodeClaim, node)
 
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 		_, err := cloudProvider.Get(ctx, providerID)
 		Expect(err).ToNot(HaveOccurred())
-		test.ExpectExists(ctx, env.Client, node)
+		ExpectExists(ctx, env.Client, node)
 	})
 	It("should not delete many instances or nodes if they already have NodeClaim owners that match it", func() {
 		// Generate 100 instances that have different instanceIDs that have NodeClaims
@@ -300,31 +307,33 @@ var _ = Describe("GarbageCollection", func() {
 					SourceDetails: core.InstanceSourceViaImageDetails{
 						ImageId: common.String("ocid1.image.oc1.iad.aaaaaaaa"),
 					},
-					FreeformTags: map[string]string{
-						corev1beta1.NodePoolLabelKey:       "default",
-						corev1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
-						v1alpha1.LabelNodeClass:            nodeClass.Name},
+					DefinedTags: map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: {
+						utils.SafeTagKey(karpv1.NodePoolLabelKey):         "default",
+						utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey): options.FromContext(ctx).ClusterName,
+						utils.SafeTagKey(v1alpha1.LabelNodeClass):         nodeClass.Name}},
 					TimeCreated: &common.SDKTime{Time: time.Now().Add(-time.Minute)},
 				},
 			)
-			nodeClaim := coretest.NodeClaim(corev1beta1.NodeClaim{
-				Spec: corev1beta1.NodeClaimSpec{
-					NodeClassRef: &corev1beta1.NodeClassReference{
-						Name: nodeClass.Name,
+			nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+				Spec: karpv1.NodeClaimSpec{
+					NodeClassRef: &karpv1.NodeClassReference{
+						Group: object.GVK(nodeClass).Group,
+						Kind:  object.GVK(nodeClass).Kind,
+						Name:  nodeClass.Name,
 					},
 				},
-				Status: corev1beta1.NodeClaimStatus{
+				Status: karpv1.NodeClaimStatus{
 					ProviderID: instanceID,
 				},
 			})
 			node := coretest.Node(coretest.NodeOptions{
 				ProviderID: instanceID,
 			})
-			test.ExpectApplied(ctx, env.Client, nodeClaim, node)
+			ExpectApplied(ctx, env.Client, nodeClaim, node)
 			ids = append(ids, instanceID)
 			nodes = append(nodes, node)
 		}
-		test.ExpectReconcileSucceeded(ctx, garbageCollectionController, client.ObjectKey{})
+		ExpectSingletonReconciled(ctx, garbageCollectionController)
 
 		wg := sync.WaitGroup{}
 		for i := range ids {
@@ -335,7 +344,7 @@ var _ = Describe("GarbageCollection", func() {
 
 				_, err := cloudProvider.Get(ctx, id)
 				Expect(err).ToNot(HaveOccurred())
-				test.ExpectExists(ctx, env.Client, node)
+				ExpectExists(ctx, env.Client, node)
 			}(ids[i], nodes[i])
 		}
 		wg.Wait()

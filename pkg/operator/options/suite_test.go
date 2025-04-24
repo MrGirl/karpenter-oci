@@ -26,7 +26,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -61,9 +61,8 @@ var _ = Describe("Options", func() {
 			"--ssh-key", "env-ssh",
 			"--compartment-id", "ocid1.compartment.oc1..aaaaaaaa",
 			"--vm-memory-overhead-percent", "0.075",
-			"--flex-cpu-mem-ratio", "4",
-			"--flex-cpu-constrain-list", "2,4,8",
-			"--available-domain-prefix", "env-prefix")
+			"--flex-cpu-mem-ratios", "2,4",
+			"--flex-cpu-constrain-list", "2,4,8")
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
 			ClusterName:             lo.ToPtr("env-cluster"),
@@ -73,9 +72,8 @@ var _ = Describe("Options", func() {
 			SshKey:                  lo.ToPtr("env-ssh"),
 			CompartmentId:           lo.ToPtr("ocid1.compartment.oc1..aaaaaaaa"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.075),
-			FlexCpuMemRatio:         lo.ToPtr[int](4),
+			FlexCpuMemRatios:        lo.ToPtr("2,4"),
 			FlexCpuConstrainList:    lo.ToPtr("2,4,8"),
-			AvailableDomainPrefix:   lo.ToPtr("env-prefix"),
 		}))
 	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
@@ -86,7 +84,7 @@ var _ = Describe("Options", func() {
 		os.Setenv("SSH_KEY", "env-ssh")
 		os.Setenv("COMPARTMENT_ID", "ocid1.compartment.oc1..aaaaaaaa")
 		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.075")
-		os.Setenv("FLEX_CPU_MEM_RATIO", "4")
+		os.Setenv("FLEX_CPU_MEM_RATIOS", "2,4")
 		os.Setenv("FLEX_CPU_CONSTRAIN_LIST", "2,4,8")
 		os.Setenv("AVAILABLE_DOMAIN_PREFIX", "env-prefix")
 
@@ -103,9 +101,8 @@ var _ = Describe("Options", func() {
 			SshKey:                  lo.ToPtr("env-ssh"),
 			CompartmentId:           lo.ToPtr("ocid1.compartment.oc1..aaaaaaaa"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.075),
-			FlexCpuMemRatio:         lo.ToPtr[int](4),
+			FlexCpuMemRatios:        lo.ToPtr("2,4"),
 			FlexCpuConstrainList:    lo.ToPtr("2,4,8"),
-			AvailableDomainPrefix:   lo.ToPtr("env-prefix"),
 		}))
 	})
 
@@ -137,7 +134,7 @@ func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
 	Expect(optsA.SshKey).To(Equal(optsB.SshKey))
 	Expect(optsA.CompartmentId).To(Equal(optsB.CompartmentId))
 	Expect(optsA.VMMemoryOverheadPercent).To(Equal(optsB.VMMemoryOverheadPercent))
-	Expect(optsA.FlexCpuMemRatio).To(Equal(optsB.FlexCpuMemRatio))
+	Expect(optsA.FlexCpuMemRatios).To(Equal(optsB.FlexCpuMemRatios))
 	Expect(optsA.FlexCpuConstrainList).To(Equal(optsB.FlexCpuConstrainList))
-	Expect(optsA.AvailableDomainPrefix).To(Equal(optsB.AvailableDomainPrefix))
+	Expect(optsA.AvailableDomains).To(Equal(optsB.AvailableDomains))
 }

@@ -26,7 +26,7 @@ import (
 	"karpenter-oci/pkg/utils"
 	"knative.dev/pkg/ptr"
 	"math"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
@@ -60,6 +60,10 @@ type TaxBrackets []struct {
 var (
 	// reservedMemoryTaxGi denotes the tax brackets for memory in Gi.
 	reservedMemoryTaxGi = TaxBrackets{
+		{
+			LowerBound:  2,
+			Recommended: 1,
+		},
 		{
 			LowerBound:  4,
 			Recommended: 1,
@@ -119,7 +123,7 @@ func (t TaxBrackets) Calculate(amount float64) float64 {
 	return tax
 }
 
-func NewInstanceType(ctx context.Context, shape *WrapShape, nodeClass *v1alpha1.OciNodeClass, kc *corev1beta1.KubeletConfiguration,
+func NewInstanceType(ctx context.Context, shape *WrapShape, nodeClass *v1alpha1.OciNodeClass, kc *v1alpha1.KubeletConfiguration,
 	region string, zones []string, offerings cloudprovider.Offerings) *cloudprovider.InstanceType {
 	return &cloudprovider.InstanceType{
 		Name:         *shape.Shape.Shape,
@@ -127,9 +131,9 @@ func NewInstanceType(ctx context.Context, shape *WrapShape, nodeClass *v1alpha1.
 		Offerings:    offerings,
 		Capacity:     computeCapacity(ctx, shape, kc, nodeClass),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
-			KubeReserved:      KubeReservedResources(kc, cpu(shape.CalcCpu), memory(ctx, shape.CalMemInGBs)),
+			KubeReserved:      KubeReservedResources(kc, cpu(shape.CalcCpu), resources.Quantity(fmt.Sprintf("%dGi", shape.CalMemInGBs))),
 			SystemReserved:    SystemReservedResources(kc),
-			EvictionThreshold: EvictionThreshold(memory(ctx, shape.CalMemInGBs), resources.Quantity(fmt.Sprintf("%dGi", nodeClass.Spec.BootConfig.BootVolumeSizeInGBs)), kc.EvictionHard),
+			EvictionThreshold: EvictionThreshold(resources.Quantity(fmt.Sprintf("%dGi", shape.CalMemInGBs)), resources.Quantity(fmt.Sprintf("%dGi", nodeClass.Spec.BootConfig.BootVolumeSizeInGBs)), kc),
 		},
 	}
 }
@@ -148,7 +152,9 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 		scheduling.NewRequirement(v1.LabelTopologyZone, v1.NodeSelectorOpIn, zones...),
 		scheduling.NewRequirement(v1.LabelTopologyRegion, v1.NodeSelectorOpIn, region),
 		// Well Known to Karpenter
-		scheduling.NewRequirement(corev1beta1.CapacityTypeLabelKey, v1.NodeSelectorOpIn, lo.Map(offerings.Available(), func(o cloudprovider.Offering, _ int) string { return o.CapacityType })...),
+		scheduling.NewRequirement(corev1.CapacityTypeLabelKey, v1.NodeSelectorOpIn, lo.Map(offerings.Available(), func(o cloudprovider.Offering, _ int) string {
+			return o.Requirements.Get(corev1.CapacityTypeLabelKey).Any()
+		})...),
 		// Well Known to OCI
 		scheduling.NewRequirement(v1alpha1.LabelInstanceShapeName, v1.NodeSelectorOpIn, *shape.Shape.Shape),
 		scheduling.NewRequirement(v1alpha1.LabelInstanceCPU, v1.NodeSelectorOpIn, fmt.Sprint(shape.CalcCpu)),
@@ -175,7 +181,7 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 	return requirements
 }
 
-func computeCapacity(ctx context.Context, shape *WrapShape, kc *corev1beta1.KubeletConfiguration, nodeclass *v1alpha1.OciNodeClass) v1.ResourceList {
+func computeCapacity(ctx context.Context, shape *WrapShape, kc *v1alpha1.KubeletConfiguration, nodeclass *v1alpha1.OciNodeClass) v1.ResourceList {
 
 	resourceList := v1.ResourceList{
 		v1.ResourceCPU:              *cpu(shape.CalcCpu),
@@ -212,7 +218,7 @@ func nvidiaGPUs(shape core.Shape) *resource.Quantity {
 	return resources.Quantity(fmt.Sprint(count))
 }
 
-func pods(shape *WrapShape, kc *corev1beta1.KubeletConfiguration) *resource.Quantity {
+func pods(shape *WrapShape, kc *v1alpha1.KubeletConfiguration) *resource.Quantity {
 	var count int64
 	switch {
 	case kc != nil && kc.MaxPods != nil:
@@ -227,7 +233,7 @@ func pods(shape *WrapShape, kc *corev1beta1.KubeletConfiguration) *resource.Quan
 	return resources.Quantity(fmt.Sprint(count))
 }
 
-func SystemReservedResources(kc *corev1beta1.KubeletConfiguration) v1.ResourceList {
+func SystemReservedResources(kc *v1alpha1.KubeletConfiguration) v1.ResourceList {
 	if kc != nil && kc.SystemReserved != nil {
 		return lo.MapEntries(kc.SystemReserved, func(k string, v string) (v1.ResourceName, resource.Quantity) {
 			return v1.ResourceName(k), resource.MustParse(v)
@@ -240,8 +246,8 @@ func SystemReservedResources(kc *corev1beta1.KubeletConfiguration) v1.ResourceLi
 }
 
 // https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengbestpractices_topic-Cluster-Management-best-practices.htm#contengbestpractices_topic-Cluster-Management-best-practices__ManagingOKEClusters-Reserveresourcesforkubernetesandossystemdaemons
-func KubeReservedResources(kc *corev1beta1.KubeletConfiguration, cpu *resource.Quantity, memory *resource.Quantity) v1.ResourceList {
-	if kc != nil && kc.KubeReserved != nil {
+func KubeReservedResources(kc *v1alpha1.KubeletConfiguration, cpu *resource.Quantity, memory *resource.Quantity) v1.ResourceList {
+	if kc != nil && len(kc.KubeReserved) != 0 {
 		return lo.MapEntries(kc.KubeReserved, func(k string, v string) (v1.ResourceName, resource.Quantity) {
 			return v1.ResourceName(k), resource.MustParse(v)
 		})
@@ -258,7 +264,7 @@ func KubeReservedResources(kc *corev1beta1.KubeletConfiguration, cpu *resource.Q
 	return resourceList
 }
 
-func EvictionThreshold(memory *resource.Quantity, storage *resource.Quantity, evictionHard map[string]string) v1.ResourceList {
+func EvictionThreshold(memory *resource.Quantity, storage *resource.Quantity, kc *v1alpha1.KubeletConfiguration) v1.ResourceList {
 	overhead := v1.ResourceList{
 		v1.ResourceMemory:           resource.MustParse("100Mi"),
 		v1.ResourceEphemeralStorage: resource.MustParse(fmt.Sprint(math.Ceil(float64(storage.Value()) / 100 * 10))),
@@ -266,8 +272,8 @@ func EvictionThreshold(memory *resource.Quantity, storage *resource.Quantity, ev
 
 	override := v1.ResourceList{}
 	var evictionSignals []map[string]string
-	if evictionHard != nil {
-		evictionSignals = append(evictionSignals, evictionHard)
+	if kc != nil && kc.EvictionHard != nil {
+		evictionSignals = append(evictionSignals, kc.EvictionHard)
 	}
 
 	for _, m := range evictionSignals {

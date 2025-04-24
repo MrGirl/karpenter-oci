@@ -16,19 +16,24 @@ package controllers
 
 import (
 	"context"
+	"github.com/awslabs/operatorpkg/controller"
 	"karpenter-oci/pkg/controllers/nodeclaim/garbagecollection"
-	"karpenter-oci/pkg/controllers/nodeclass"
+	"karpenter-oci/pkg/controllers/nodeclass/hash"
+	"karpenter-oci/pkg/controllers/nodeclass/status"
+	"karpenter-oci/pkg/controllers/nodeclass/termination"
 	"karpenter-oci/pkg/providers/imagefamily"
+	"karpenter-oci/pkg/providers/securitygroup"
 	"karpenter-oci/pkg/providers/subnet"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-	"sigs.k8s.io/karpenter/pkg/operator/controller"
 )
 
-func NewControllers(ctx context.Context, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, recorder events.Recorder, imageProvider *imagefamily.Provider, subnetProvider *subnet.Provider) []controller.Controller {
+func NewControllers(ctx context.Context, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, recorder events.Recorder, imageProvider *imagefamily.Provider, subnetProvider *subnet.Provider, securityProvider *securitygroup.Provider) []controller.Controller {
 	controllers := []controller.Controller{
-		nodeclass.NewController(kubeClient, recorder, imageProvider, subnetProvider),
+		hash.NewController(kubeClient),
+		status.NewController(kubeClient, subnetProvider, securityProvider, imageProvider),
+		termination.NewController(kubeClient, recorder),
 		garbagecollection.NewController(kubeClient, cloudProvider)}
 	return controllers
 }

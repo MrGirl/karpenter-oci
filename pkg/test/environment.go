@@ -16,11 +16,12 @@ package test
 
 import (
 	"context"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+
 	//nolint:revive,stylecheck
 	//nolint:revive,stylecheck
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
-	apis "karpenter-oci/pkg/apis"
 	ocicache "karpenter-oci/pkg/cache"
 	fake "karpenter-oci/pkg/fake"
 	"karpenter-oci/pkg/providers/imagefamily"
@@ -30,17 +31,14 @@ import (
 	"karpenter-oci/pkg/providers/securitygroup"
 	"karpenter-oci/pkg/providers/subnet"
 	"knative.dev/pkg/ptr"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
-
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 func init() {
-	lo.Must0(apis.AddToScheme(scheme.Scheme))
-	corev1beta1.NormalizedLabels = lo.Assign(corev1beta1.NormalizedLabels)
+	//lo.Must0(apis.AddToScheme(scheme.Scheme))
+	v1.NormalizedLabels = lo.Assign(v1.NormalizedLabels)
 }
 
 type Environment struct {
@@ -127,6 +125,7 @@ func (env *Environment) Reset() {
 	env.AmiCache.Flush()
 	env.InstanceTypeCache.Flush()
 	env.SubnetCache.Flush()
+	env.SecurityGroupCache.Flush()
 
 	mfs, err := crmetrics.Registry.Gather()
 	if err != nil {

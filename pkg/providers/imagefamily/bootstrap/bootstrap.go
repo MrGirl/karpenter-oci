@@ -19,8 +19,8 @@ import (
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"karpenter-oci/pkg/apis/v1alpha1"
 	"knative.dev/pkg/ptr"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sort"
 	"strings"
 )
@@ -30,7 +30,7 @@ type Options struct {
 	ClusterName      string
 	ClusterEndpoint  string
 	ClusterDns       string
-	KubeletConfig    *corev1beta1.KubeletConfiguration
+	KubeletConfig    *v1alpha1.KubeletConfiguration
 	Taints           []core.Taint      `hash:"set"`
 	Labels           map[string]string `hash:"set"`
 	CABundle         *string

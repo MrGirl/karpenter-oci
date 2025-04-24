@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/awslabs/operatorpkg/status"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"karpenter-oci/pkg/apis"
@@ -25,6 +26,8 @@ import (
 	"karpenter-oci/pkg/cloudprovider"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -33,14 +36,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
-	. "knative.dev/pkg/logging/testing"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
+
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
 )
 
 var ctx context.Context
@@ -59,17 +62,17 @@ func TestLaunchTemplate(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...), coretest.WithFieldIndexers(test.OciNodeClassFieldIndexer(ctx)))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}}))
 	ctx, stop = context.WithCancel(ctx)
 	ociEnv = test.NewEnvironment(ctx, env)
 
 	fakeClock = &clock.FakeClock{}
 	cloudProvider = cloudprovider.New(ociEnv.InstanceTypesProvider, ociEnv.InstanceProvider, events.NewRecorder(&record.FakeRecorder{}),
 		env.Client, ociEnv.AMIProvider)
-	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster)
+	cluster = state.NewCluster(fakeClock, env.Client)
+	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster, fakeClock)
 })
 
 var _ = AfterSuite(func() {
@@ -79,7 +82,7 @@ var _ = AfterSuite(func() {
 
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}}))
 	cluster.Reset()
 	ociEnv.Reset()
 
@@ -88,33 +91,33 @@ var _ = BeforeEach(func() {
 })
 
 var _ = AfterEach(func() {
-	test.ExpectCleanedUp(ctx, env.Client)
+	ExpectCleanedUp(ctx, env.Client)
 })
 
 var _ = Describe("LaunchTemplate Provider", func() {
-	var nodePool *corev1beta1.NodePool
+	var nodePool *karpv1.NodePool
 	var nodeClass *v1alpha1.OciNodeClass
 	BeforeEach(func() {
 		nodeClass = test.OciNodeClass()
-		nodePool = coretest.NodePool(corev1beta1.NodePool{
-			Spec: corev1beta1.NodePoolSpec{
-				Template: corev1beta1.NodeClaimTemplate{
-					ObjectMeta: corev1beta1.ObjectMeta{
+		nodeClass.StatusConditions().SetTrue(status.ConditionReady)
+		nodePool = coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					ObjectMeta: karpv1.ObjectMeta{
 						// TODO @joinnis: Move this into the coretest.NodePool function
 						Labels: map[string]string{coretest.DiscoveryLabel: "unspecified"},
 					},
-					Spec: corev1beta1.NodeClaimSpec{
-						Requirements: []corev1beta1.NodeSelectorRequirementWithMinValues{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 							{
 								NodeSelectorRequirement: v1.NodeSelectorRequirement{
-									Key:      corev1beta1.CapacityTypeLabelKey,
+									Key:      karpv1.CapacityTypeLabelKey,
 									Operator: v1.NodeSelectorOpIn,
-									Values:   []string{corev1beta1.CapacityTypeOnDemand},
+									Values:   []string{karpv1.CapacityTypeOnDemand},
 								},
 							},
 						},
-						Kubelet: &corev1beta1.KubeletConfiguration{},
-						NodeClassRef: &corev1beta1.NodeClassReference{
+						NodeClassRef: &karpv1.NodeClassReference{
 							Name: nodeClass.Name,
 						},
 					},
@@ -125,10 +128,10 @@ var _ = Describe("LaunchTemplate Provider", func() {
 
 	Context("Labels", func() {
 		It("should apply labels to the node", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			node := test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
 			Expect(node.Labels).To(HaveKey(v1.LabelOSStable))
 			Expect(node.Labels).To(HaveKey(v1.LabelArchStable))
 			Expect(node.Labels).To(HaveKey(v1.LabelInstanceTypeStable))
@@ -140,16 +143,16 @@ var _ = Describe("LaunchTemplate Provider", func() {
 				"tag1": "tag1value",
 				"tag2": "tag2value",
 			}
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 			Expect(ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Len()).To(Equal(1))
 			createFleetInput := ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Pop()
-			Expect(createFleetInput.FreeformTags).To(HaveLen(6))
+			Expect(createFleetInput.DefinedTags[options.FromContext(ctx).TagNamespace]).To(HaveLen(5))
 
 			// tags should be included in instance
-			ExpectTags(createFleetInput.FreeformTags, nodeClass.Spec.Tags)
+			ExpectTags(createFleetInput.DefinedTags[options.FromContext(ctx).TagNamespace], nodeClass.Spec.Tags)
 		})
 	})
 	Context("Block Device Mappings", func() {
@@ -164,10 +167,10 @@ var _ = Describe("LaunchTemplate Provider", func() {
 					VpusPerGB: 10,
 				},
 			}
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 			Expect(ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Len()).To(BeNumerically(">=", 1))
 			ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.ForEach(func(ltInput *core.LaunchInstanceRequest) {
 				volumeAttrs, err := GetVolumeDetails(ltInput)
@@ -179,7 +182,7 @@ var _ = Describe("LaunchTemplate Provider", func() {
 	})
 	Context("Ephemeral Storage", func() {
 		It("should pack pods when a daemonset has an ephemeral-storage request", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass, test.DaemonSet(
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass, test.DaemonSet(
 				test.DaemonSetOptions{
 					PodOptions: coretest.PodOptions{
 						ResourceRequirements: v1.ResourceRequirements{
@@ -189,39 +192,39 @@ var _ = Describe("LaunchTemplate Provider", func() {
 					}},
 			))
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 		})
 		It("should pack pods with any ephemeral-storage request", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceEphemeralStorage: resource.MustParse("1G"),
 				}}})
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 		})
 		It("should pack pods with large ephemeral-storage request", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceEphemeralStorage: resource.MustParse("10Gi"),
 				}}})
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 		})
 		It("should not pack pods if the sum of pod ephemeral-storage and overhead exceeds node capacity", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceEphemeralStorage: resource.MustParse("109Gi"),
 				}}})
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectNotScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectNotScheduled(ctx, env.Client, pod)
 		})
 		It("should launch multiple nodes if sum of pod ephemeral-storage requests exceeds a single nodes capacity", func() {
 			var nodes []*v1.Node
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pods := []*v1.Pod{
 				coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 					Requests: map[v1.ResourceName]resource.Quantity{
@@ -236,14 +239,14 @@ var _ = Describe("LaunchTemplate Provider", func() {
 				},
 				}),
 			}
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 			for _, pod := range pods {
-				nodes = append(nodes, test.ExpectScheduled(ctx, env.Client, pod))
+				nodes = append(nodes, ExpectScheduled(ctx, env.Client, pod))
 			}
 			Expect(nodes).To(HaveLen(2))
 		})
 		It("should only pack pods with ephemeral-storage requests that will fit on an available node", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pods := []*v1.Pod{
 				coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 					Requests: map[v1.ResourceName]resource.Quantity{
@@ -258,20 +261,20 @@ var _ = Describe("LaunchTemplate Provider", func() {
 				},
 				}),
 			}
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
-			test.ExpectScheduled(ctx, env.Client, pods[0])
-			test.ExpectNotScheduled(ctx, env.Client, pods[1])
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectScheduled(ctx, env.Client, pods[0])
+			ExpectNotScheduled(ctx, env.Client, pods[1])
 		})
 		It("should not pack pod if no available instance types have enough storage", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool)
+			ExpectApplied(ctx, env.Client, nodePool)
 			pod := coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceEphemeralStorage: resource.MustParse("150Gi"),
 				},
 			},
 			})
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			test.ExpectNotScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectNotScheduled(ctx, env.Client, pod)
 		})
 		It("should pack pods using the blockdevicemappings from the provider spec when defined", func() {
 			nodeClass.Spec.BlockDevices = []*v1alpha1.VolumeAttributes{
@@ -284,29 +287,29 @@ var _ = Describe("LaunchTemplate Provider", func() {
 					VpusPerGB: 10,
 				},
 			}
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod(coretest.PodOptions{ResourceRequirements: v1.ResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceEphemeralStorage: resource.MustParse("25Gi"),
 				},
 			},
 			})
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
 
 			// capacity isn't recorded on the node any longer, but we know the pod should schedule
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 		})
 	})
 	// todo userdata test
 })
 
 // ExpectTags verifies that the expected tags are a subset of the tags found
-func ExpectTags(existingTags map[string]string, expected map[string]string) {
+func ExpectTags(existingTags map[string]interface{}, expected map[string]string) {
 	GinkgoHelper()
 	for expKey, expValue := range expected {
 		foundValue, ok := existingTags[expKey]
 		Expect(ok).To(BeTrue(), fmt.Sprintf("expected to find tag %s in %s", expKey, existingTags))
-		Expect(foundValue).To(Equal(expValue))
+		Expect(foundValue.(string)).To(Equal(expValue))
 	}
 }
 

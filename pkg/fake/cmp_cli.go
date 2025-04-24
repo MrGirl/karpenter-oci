@@ -66,6 +66,8 @@ var defaultDescribeInstanceTypesOutput = core.ListShapesResponse{
 			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
 		{Shape: common.String("shape-4"), IsFlexible: common.Bool(false), Ocpus: common.Float32(8), MemoryInGBs: common.Float32(32),
 			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
+		{Shape: common.String("shape-gpu"), IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1), Gpus: common.Int(1), GpuDescription: common.String("A100")},
 	},
 }
 
@@ -165,9 +167,7 @@ func (c *CmpCli) ListInstances(ctx context.Context, request core.ListInstancesRe
 		var instances []*core.Instance
 		c.Instances.Range(func(k interface{}, v interface{}) bool {
 			ins := v.(*core.Instance)
-			if lo.FromPtr(ins.DisplayName) == lo.FromPtr(request.DisplayName) {
-				instances = append(instances, ins)
-			}
+			instances = append(instances, ins)
 			return true
 		})
 

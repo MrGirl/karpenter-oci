@@ -36,22 +36,22 @@ type VcnBehavior struct {
 
 var defaultSubnets = []core.Subnet{
 	{
-		CompartmentId: common.String("ocid1.compartment.oc1..aaaaaaaa"),
-		Id:            common.String("ocid1.subnet.oc1.iad.aaaaaaaa"),
-		DisplayName:   common.String("private-1"),
-		FreeformTags:  nil,
+		CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+		Id:             common.String("ocid1.subnet.oc1.iad.aaaaaaaa"),
+		DisplayName:    common.String("private-1"),
+		LifecycleState: core.SubnetLifecycleStateAvailable,
 	},
 	{
-		CompartmentId: common.String("ocid1.compartment.oc1..aaaaaaaa"),
-		Id:            common.String("ocid1.subnet.oc1.iad.aaaaaaab"),
-		DisplayName:   common.String("private-1"),
-		FreeformTags:  nil,
+		CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+		Id:             common.String("ocid1.subnet.oc1.iad.aaaaaaab"),
+		DisplayName:    common.String("private-1"),
+		LifecycleState: core.SubnetLifecycleStateAvailable,
 	},
 	{
-		CompartmentId: common.String("ocid1.compartment.oc1..aaaaaaaa"),
-		Id:            common.String("ocid1.subnet.oc1.iad.aaaaaaac"),
-		DisplayName:   common.String("private-2"),
-		FreeformTags:  nil,
+		CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+		Id:             common.String("ocid1.subnet.oc1.iad.aaaaaaac"),
+		DisplayName:    common.String("private-2"),
+		LifecycleState: core.SubnetLifecycleStateAvailable,
 	},
 }
 
