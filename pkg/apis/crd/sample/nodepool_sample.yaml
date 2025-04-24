@@ -1,0 +1,35 @@
+apiVersion: karpenter.sh/v1beta1
+kind: NodePool
+metadata:
+  name: nathan-test
+spec:
+  disruption:
+    consolidateAfter: 5m0s
+    consolidationPolicy: WhenEmpty
+    expireAfter: Never
+  limits:
+    cpu: "16"
+    memory: 64Gi
+  template:
+    metadata:
+      labels:
+        servicegroup: nathan-test
+    spec:
+      taints:
+        - effect: NoSchedule
+          key: servicegroup
+          value: nathan-test
+      nodeClassRef:
+        apiVersion: karpenter.k8s.oracle/v1alpha1
+        kind: OciNodeClass
+        name: nathan-test
+      requirements:
+        - key: karpenter.k8s.oracle/instance-shape-name
+          operator: In
+          values:
+            - VM.Standard.E4.Flex
+        - key: kubernetes.io/os
+          operator: In
+          values:
+            - linux
+

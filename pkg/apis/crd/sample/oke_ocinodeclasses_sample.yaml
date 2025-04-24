@@ -1,0 +1,29 @@
+apiVersion: karpenter.k8s.oracle/v1alpha1
+kind: OciNodeClass
+metadata:
+  name: nathan-test
+spec:
+  blockDevices:
+    - sizeInGBs: 100
+      vpusPerGB: 10
+  bootConfig:
+    bootVolumeSizeInGBs: 50
+    bootVolumeVpusPerGB: 10
+  subnetName: {{ .subnetName }}
+  securityGroupNames:
+    - TRUST-sg
+  image:
+    compartmentId: {{ .image.compartmentId }}
+    name: {{ .image.name }}
+  imageFamily: OracleLinux
+  instanceShapeAds:
+    {{- range .instanceShapeAds }}
+    - {{ . }}
+    {{- end}}
+  tags:
+    owner: nathan
+  userData: |
+    #!/usr/bin/env bash
+    bash /etc/oke/oke-install.sh \
+      --apiserver-endpoint "%s" \
+      --kubelet-ca-cert "%s"
