@@ -17,16 +17,12 @@ package apis
 
 import (
 	_ "embed"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
-
+	"github.com/awslabs/operatorpkg/object"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/samber/lo"
+	"karpenter-oci/pkg/apis/v1alpha1"
 
 	"sigs.k8s.io/karpenter/pkg/apis"
-	"sigs.k8s.io/karpenter/pkg/utils/functional"
 )
 
 var (
@@ -43,10 +39,6 @@ var (
 	//go:embed crd/bases/karpenter.k8s.oracle_ocinodeclasses.yaml
 	OciNodeClassCRD []byte
 	CRDs            = append(apis.CRDs,
-		lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](OciNodeClassCRD)),
+		object.Unmarshal[v1.CustomResourceDefinition](OciNodeClassCRD),
 	)
 )
-
-func init() {
-	lo.Must0(AddToScheme(scheme.Scheme))
-}

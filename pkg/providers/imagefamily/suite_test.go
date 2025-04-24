@@ -24,10 +24,9 @@ import (
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
-	. "knative.dev/pkg/logging/testing"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 	"testing"
 )
 
@@ -43,7 +42,7 @@ func TestImageFamily(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	ociEnv = test.NewEnvironment(ctx, env)

@@ -20,12 +20,12 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"karpenter-oci/pkg/apis/v1alpha1"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 
 	"github.com/imdario/mergo"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/test"
 )
 
@@ -39,16 +39,17 @@ func OciNodeClass(overrides ...v1alpha1.OciNodeClass) *v1alpha1.OciNodeClass {
 				Name:          "ubuntu",
 				CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
 			},
-			SubnetName:  "private-1",
-			UserData:    common.String("#!/bin/bash"),
-			ImageFamily: v1alpha1.Ubuntu2204ImageFamily,
-			Tags:        map[string]string{"test_key": "test_val"},
+			VcnId:              "vcn_1",
+			SecurityGroupNames: []string{"securityGroup-test1", "securityGroup-test2"},
+			SubnetName:         "private-1",
+			UserData:           common.String("#!/bin/bash"),
+			ImageFamily:        v1alpha1.Ubuntu2204ImageFamily,
+			Tags:               map[string]string{"test_key": "test_val"},
 			BootConfig: &v1alpha1.BootConfig{
 				BootVolumeSizeInGBs: 100,
 				BootVolumeVpusPerGB: 10,
 			},
-			BlockDevices:     []*v1alpha1.VolumeAttributes{{SizeInGBs: 100, VpusPerGB: 20}},
-			InstanceShapeAds: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"},
+			BlockDevices: []*v1alpha1.VolumeAttributes{{SizeInGBs: 100, VpusPerGB: 20}},
 		},
 	}
 	for _, override := range overrides {
@@ -66,8 +67,8 @@ func OciNodeClass(overrides ...v1alpha1.OciNodeClass) *v1alpha1.OciNodeClass {
 
 func OciNodeClassFieldIndexer(ctx context.Context) func(cache.Cache) error {
 	return func(c cache.Cache) error {
-		return c.IndexField(ctx, &corev1beta1.NodeClaim{}, "spec.nodeClassRef.name", func(obj client.Object) []string {
-			nc := obj.(*corev1beta1.NodeClaim)
+		return c.IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.name", func(obj client.Object) []string {
+			nc := obj.(*v1.NodeClaim)
 			if nc.Spec.NodeClassRef == nil {
 				return []string{""}
 			}

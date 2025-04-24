@@ -16,10 +16,6 @@ spec:
     compartmentId: {{ .image.compartmentId }}
     name: {{ .image.name }}
   imageFamily: OracleLinux
-  instanceShapeAds:
-    {{- range .instanceShapeAds }}
-    - {{ . }}
-    {{- end}}
   tags:
     owner: nathan
   userData: |

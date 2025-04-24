@@ -15,10 +15,6 @@ spec:
     compartmentId: {{ image.compartmentId }}
     name: {{ image.name }}
   imageFamily: Ubuntu2204
-  instanceShapeAds:
-    {{- range .instanceShapeAds }}
-    - {{ . }}
-    {{- end}}
   tags:
     owner: nathan
   userData: |
@@ -170,7 +166,7 @@ spec:
 
     # function end
 
-    echo "$(date) Starting Custom kubelet bootstrap"
+    echo "$(date) Starting OKE bootstrap"
 
     # Allow user to specify arguments through custom cloud-init
     while [[ $# -gt 0 ]]; do
@@ -257,4 +253,4 @@ spec:
     enable_and_restart 'systemd-journald'
     sudo /usr/bin/sh -c '/usr/bin/rm -rf /var/lib/cni/networks/* && swapoff -a'
 
-    echo "$(date) Finished Custom kubelet bootstrap"
+    echo "$(date) Finished OKE bootstrap"

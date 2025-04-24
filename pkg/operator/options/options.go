@@ -19,6 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"karpenter-oci/pkg/utils"
 	"os"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"sigs.k8s.io/karpenter/pkg/utils/env"
@@ -40,9 +41,9 @@ type Options struct {
 	CompartmentId           string
 	TagNamespace            string
 	VMMemoryOverheadPercent float64
-	FlexCpuMemRatio         int
+	FlexCpuMemRatios        string
 	FlexCpuConstrainList    string
-	AvailableDomainPrefix   string
+	AvailableDomains        []string
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -52,10 +53,9 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.StringVar(&o.ClusterCABundle, "cluster-ca-bundle", env.WithDefaultString("CLUSTER_CA_BUNDLE", ""), "Cluster CA bundle for nodes to use for TLS connections with the API server. If not set, this is taken from the controller's TLS configuration.")
 	fs.StringVar(&o.BootStrapToken, "cluster-bootstrap-token", env.WithDefaultString("CLUSTER_BOOTSTRAP_TOKEN", ""), "Cluster bootstrap token for nodes to use for TLS connections with the API server, use bootstrap token generate kube config")
 	fs.StringVar(&o.SshKey, "ssh-key", env.WithDefaultString("SSH_KEY", ""), "ssh key to login in instance, only use for debug, value example 'ssh-rsa <your_public_SSH_key>== {keyname}'")
-	fs.Float64Var(&o.VMMemoryOverheadPercent, "vm-memory-overhead-percent", env.WithDefaultFloat64("VM_MEMORY_OVERHEAD_PERCENT", 0.0), "The VM memory overhead as a percent that will be subtracted from the total memory for all instance types.")
-	fs.IntVar(&o.FlexCpuMemRatio, "flex-cpu-mem-ratio", env.WithDefaultInt("FLEX_CPU_MEM_RATIO", 4), "the ratio of cpu and mem, eg FLEX_CPU_MEM_RATIO=4, if create flex instance with 2 cores, mem should be 8Gi")
+	fs.Float64Var(&o.VMMemoryOverheadPercent, "vm-memory-overhead-percent", utils.WithDefaultFloat64("VM_MEMORY_OVERHEAD_PERCENT", 0.0), "The VM memory overhead as a percent that will be subtracted from the total memory for all instance types.")
+	fs.StringVar(&o.FlexCpuMemRatios, "flex-cpu-mem-ratios", env.WithDefaultString("FLEX_CPU_MEM_RATIOS", "4"), "the ratios of vcpu and mem, eg FLEX_CPU_MEM_RATIOS=2,4, if create flex instance with 2 cores(1 ocpu), mem should be 4Gi or 8Gi")
 	fs.StringVar(&o.FlexCpuConstrainList, "flex-cpu-constrain-list", env.WithDefaultString("FLEX_CPU_CONSTRAIN_LIST", "1,2,4,8,16,32,48,64,96,128"), "to constrain the ocpu cores of flex instance, instance create in this cpu size list, ocpu is twice of vcpu")
-	fs.StringVar(&o.AvailableDomainPrefix, "available-domain-prefix", env.WithDefaultString("AVAILABLE_DOMAIN_PREFIX", "JPqd"), "the prefix of availableDomain when create an instance")
 	fs.StringVar(&o.CompartmentId, "compartment-id", env.WithDefaultString("COMPARTMENT_ID", ""), "[REQUIRED] The compartment id to create and list instances")
 	fs.StringVar(&o.TagNamespace, "tag-namespace", env.WithDefaultString("TAG_NAMESPACE", "common-k8s"), "[REQUIRED] The tag namespace used to create and list instances")
 }

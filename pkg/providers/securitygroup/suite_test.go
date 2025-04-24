@@ -25,13 +25,17 @@ import (
 	"karpenter-oci/pkg/test"
 	"karpenter-oci/pkg/utils"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+	"sort"
+	"sync"
+
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -47,7 +51,7 @@ func TestOci(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...), coretest.WithFieldIndexers(test.OciNodeClassFieldIndexer(ctx)))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
@@ -63,13 +67,13 @@ var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	nodeClass = test.OciNodeClass(v1alpha1.OciNodeClass{
-		Spec: v1alpha1.OciNodeClassSpec{},
+		Spec: v1alpha1.OciNodeClassSpec{SecurityGroupNames: []string{"securityGroup-test1", "securityGroup-test2", "securityGroup-test3"}},
 	})
 	ociEnv.Reset()
 })
 
 var _ = AfterEach(func() {
-	test.ExpectCleanedUp(ctx, env.Client)
+	ExpectCleanedUp(ctx, env.Client)
 })
 
 var _ = Describe("SecurityGroupProvider", func() {
@@ -106,6 +110,45 @@ var _ = Describe("SecurityGroupProvider", func() {
 				})
 			}
 		})
+	})
+	It("should not cause data races when calling List() simultaneously", func() {
+		wg := sync.WaitGroup{}
+		for i := 0; i < 10000; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer GinkgoRecover()
+				securityGroups, err := ociEnv.SecurityGroupProvider.List(ctx, nodeClass)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(securityGroups).To(HaveLen(3))
+				// Sort everything in parallel and ensure that we don't get data races
+				sort.Slice(securityGroups, func(i, j int) bool {
+					return *securityGroups[i].Id < *securityGroups[j].Id
+				})
+				Expect(securityGroups).To(BeEquivalentTo([]core.NetworkSecurityGroup{
+					{
+						CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+						Id:             common.String("sg-test1"),
+						LifecycleState: core.NetworkSecurityGroupLifecycleStateAvailable,
+						DisplayName:    common.String("securityGroup-test1"),
+					},
+					{
+						CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+						Id:             common.String("sg-test2"),
+						LifecycleState: core.NetworkSecurityGroupLifecycleStateAvailable,
+						DisplayName:    common.String("securityGroup-test2"),
+					},
+					{
+						CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+						Id:             common.String("sg-test3"),
+						LifecycleState: core.NetworkSecurityGroupLifecycleStateAvailable,
+						DisplayName:    common.String("securityGroup-test3"),
+					},
+				}))
+			}()
+		}
+		wg.Wait()
 	})
 })
 

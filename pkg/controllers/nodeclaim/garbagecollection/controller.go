@@ -17,18 +17,21 @@ package garbagecollection
 import (
 	"context"
 	"fmt"
+	"github.com/awslabs/operatorpkg/singleton"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/workqueue"
-	"knative.dev/pkg/logging"
+	"k8s.io/klog/v2"
+	"karpenter-oci/pkg/apis/v1alpha1"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	v1core "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/operator/controller"
 	"time"
 )
 
@@ -50,7 +53,7 @@ func (c *Controller) Name() string {
 	return "nodeclaim.garbagecollection"
 }
 
-func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
+func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 	// We LIST machines on the CloudProvider BEFORE we grab Machines/Nodes on the cluster so that we make sure that, if
 	// LISTing instances takes a long time, our information is more updated by the time we get to Machine and Node LIST
 	// This works since our CloudProvider instances are deleted based on whether the Machine exists or not, not vise-versa
@@ -58,13 +61,13 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("listing cloudprovider machines, %w", err)
 	}
-	managedRetrieved := lo.Filter(retrieved, func(nc *v1beta1.NodeClaim, _ int) bool {
-		return nc.Annotations[v1beta1.ManagedByAnnotationKey] != "" && nc.DeletionTimestamp.IsZero()
+	managedRetrieved := lo.Filter(retrieved, func(nc *v1core.NodeClaim, _ int) bool {
+		return nc.Annotations[v1alpha1.ManagedByAnnotationKey] != "" && nc.DeletionTimestamp.IsZero()
 	})
-	terminated := lo.Filter(retrieved, func(nc *v1beta1.NodeClaim, _ int) bool {
-		return nc.Annotations[v1beta1.ManagedByAnnotationKey] != "" && !nc.DeletionTimestamp.IsZero()
+	terminated := lo.Filter(retrieved, func(nc *v1core.NodeClaim, _ int) bool {
+		return nc.Annotations[v1alpha1.ManagedByAnnotationKey] != "" && !nc.DeletionTimestamp.IsZero()
 	})
-	nodeClaimList := &v1beta1.NodeClaimList{}
+	nodeClaimList := &v1core.NodeClaimList{}
 	if err = c.kubeClient.List(ctx, nodeClaimList); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -72,7 +75,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 	if err = c.kubeClient.List(ctx, nodeList); err != nil {
 		return reconcile.Result{}, err
 	}
-	resolvedProviderIDs := sets.New[string](lo.FilterMap(nodeClaimList.Items, func(n v1beta1.NodeClaim, _ int) (string, bool) {
+	resolvedProviderIDs := sets.New[string](lo.FilterMap(nodeClaimList.Items, func(n v1core.NodeClaim, _ int) (string, bool) {
 		return n.Status.ProviderID, n.Status.ProviderID != ""
 	})...)
 	errs := make([]error, len(retrieved))
@@ -96,12 +99,12 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 	return reconcile.Result{RequeueAfter: lo.Ternary(c.successfulCount <= 20, time.Second*10, time.Minute*2)}, nil
 }
 
-func (c *Controller) garbageCollect(ctx context.Context, nodeClaim *v1beta1.NodeClaim, nodeList *v1.NodeList) error {
-	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("provider-id", nodeClaim.Status.ProviderID))
+func (c *Controller) garbageCollect(ctx context.Context, nodeClaim *v1core.NodeClaim, nodeList *v1.NodeList) error {
+	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("provider-id", nodeClaim.Status.ProviderID))
 	if err := c.cloudProvider.Delete(ctx, nodeClaim); cloudprovider.IgnoreNodeClaimNotFoundError(err) != nil {
 		return err
 	}
-	logging.FromContext(ctx).Info("garbage collected cloudprovider instance")
+	log.FromContext(ctx).V(1).Info("garbage collected cloudprovider instance")
 
 	// Go ahead and cleanup the node if we know that it exists to make scheduling go quicker
 	if node, ok := lo.Find(nodeList.Items, func(n v1.Node) bool {
@@ -110,13 +113,13 @@ func (c *Controller) garbageCollect(ctx context.Context, nodeClaim *v1beta1.Node
 		if err := c.kubeClient.Delete(ctx, &node); err != nil {
 			return client.IgnoreNotFound(err)
 		}
-		logging.FromContext(ctx).With("node", node.Name).Info("garbage collected node")
+		log.FromContext(ctx).WithValues("Node", klog.KRef("", node.Name)).V(1).Info("garbage collected node")
 	}
 	return nil
 }
 
-func (c *Controller) garbageNode(ctx context.Context, nodeClaim *v1beta1.NodeClaim, nodeList *v1.NodeList) error {
-	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("provider-id", nodeClaim.Status.ProviderID))
+func (c *Controller) garbageNode(ctx context.Context, nodeClaim *v1core.NodeClaim, nodeList *v1.NodeList) error {
+	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("provider-id", nodeClaim.Status.ProviderID))
 
 	// Go ahead and cleanup the node if we know that it exists to make scheduling go quicker
 	if node, ok := lo.Find(nodeList.Items, func(n v1.Node) bool {
@@ -129,12 +132,15 @@ func (c *Controller) garbageNode(ctx context.Context, nodeClaim *v1beta1.NodeCla
 			if err := c.kubeClient.Delete(ctx, &node); err != nil {
 				return client.IgnoreNotFound(err)
 			}
-			logging.FromContext(ctx).With("node", node.Name).Info("garbage collected node")
+			log.FromContext(ctx).WithValues("Node", klog.KRef("", node.Name)).V(1).Info("garbage collected node")
 		}
 	}
 	return nil
 }
 
-func (c *Controller) Builder(_ context.Context, m manager.Manager) controller.Builder {
-	return controller.NewSingletonManagedBy(m)
+func (c *Controller) Register(_ context.Context, m manager.Manager) error {
+	return controllerruntime.NewControllerManagedBy(m).
+		Named("nodeclaim.garbagecollection").
+		WatchesRawSource(singleton.Source()).
+		Complete(singleton.AsReconciler(c))
 }

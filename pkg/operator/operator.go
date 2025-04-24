@@ -21,6 +21,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/common/auth"
 	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/oracle/oci-go-sdk/v65/identity"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -28,7 +29,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
 	operator_alt "karpenter-oci/pkg/alt/karpenter-core/pkg/operator"
-	"karpenter-oci/pkg/apis"
 	ocicache "karpenter-oci/pkg/cache"
 	"karpenter-oci/pkg/operator/oci/config"
 	metadata "karpenter-oci/pkg/operator/oci/instance"
@@ -39,10 +39,10 @@ import (
 	"karpenter-oci/pkg/providers/launchtemplate"
 	"karpenter-oci/pkg/providers/securitygroup"
 	"karpenter-oci/pkg/providers/subnet"
+	"karpenter-oci/pkg/utils"
 	"knative.dev/pkg/ptr"
 	"os"
 	"os/user"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 )
 
 const (
@@ -54,9 +54,9 @@ const (
 	configFilePath          = "/etc/oci/config.yaml"
 )
 
-func init() {
-	lo.Must0(apis.AddToScheme(scheme.Scheme))
-}
+//func init() {
+//	lo.Must0(apis.AddToScheme(scheme.Scheme))
+//}
 
 type Operator struct {
 	*operator_alt.Operator
@@ -65,6 +65,7 @@ type Operator struct {
 	InstanceTypesProvider *instancetype.Provider
 	InstanceProvider      *instance.Provider
 	SubnetProvider        *subnet.Provider
+	SecurityGroupProvider *securitygroup.Provider
 }
 
 func NewOperator(ctx context.Context, operator *operator_alt.Operator) (context.Context, *Operator) {
@@ -80,6 +81,17 @@ func NewOperator(ctx context.Context, operator *operator_alt.Operator) (context.
 	} else if authMethod == authByInstancePrincipal {
 		configProvider = lo.Must(auth.InstancePrincipalConfigurationProvider())
 	}
+
+	// inject available domain
+	option := options.FromContext(ctx)
+	client := lo.Must(identity.NewIdentityClientWithConfigurationProvider(configProvider))
+	req := identity.ListAvailabilityDomainsRequest{CompartmentId: common.String(option.CompartmentId)}
+	rep := lo.Must(client.ListAvailabilityDomains(ctx, req))
+	option.AvailableDomains = lo.FlatMap(rep.Items, func(item identity.AvailabilityDomain, index int) []string {
+		return []string{utils.ToString(item.Name)}
+	})
+	options.ToContext(ctx, option)
+
 	region := lo.Must(configProvider.Region())
 	cmpClient := lo.Must(core.NewComputeClientWithConfigurationProvider(configProvider))
 	netClient := lo.Must(core.NewVirtualNetworkClientWithConfigurationProvider(configProvider))
@@ -97,6 +109,7 @@ func NewOperator(ctx context.Context, operator *operator_alt.Operator) (context.
 		InstanceTypesProvider: instancetypeProvider,
 		InstanceProvider:      instanceProvider,
 		SubnetProvider:        subnetProvider,
+		SecurityGroupProvider: sgProvider,
 	}
 }
 

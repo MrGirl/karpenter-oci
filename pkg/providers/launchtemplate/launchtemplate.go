@@ -19,7 +19,7 @@ import (
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/providers/imagefamily"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
@@ -39,7 +39,7 @@ func NewDefaultProvider(imageFamily *imagefamily.Resolver, cABundle *string, clu
 	}
 }
 
-func (p *DefaultProvider) CreateLaunchTemplate(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1beta1.NodeClaim, instanceType *cloudprovider.InstanceType) ([]*imagefamily.LaunchTemplate, error) {
+func (p *DefaultProvider) CreateLaunchTemplate(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *v1.NodeClaim, instanceType *cloudprovider.InstanceType) ([]*imagefamily.LaunchTemplate, error) {
 	imgOptions, err := p.createImageOptions(ctx, nodeClass, nodeClaim.Labels)
 	if err != nil {
 		return nil, err

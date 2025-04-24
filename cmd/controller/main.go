@@ -23,30 +23,31 @@ import (
 	"karpenter-oci/pkg/operator"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
-	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	corewebhooks "sigs.k8s.io/karpenter/pkg/webhooks"
 )
 
 func main() {
 	ctx, op := operator.NewOperator(operator_alt.NewOperator())
-	awsCloudProvider := cloudprovider.New(
+
+	ociCloudProvider := cloudprovider.New(
 		op.InstanceTypesProvider,
 		op.InstanceProvider,
 		op.EventRecorder,
 		op.GetClient(),
 		op.ImageProvider,
 	)
-	lo.Must0(op.AddHealthzCheck("cloud-provider", awsCloudProvider.LivenessProbe))
-	cloudProvider := metrics.Decorate(awsCloudProvider)
-
+	lo.Must0(op.AddHealthzCheck("cloud-provider", ociCloudProvider.LivenessProbe))
+	cloudProvider := metrics.Decorate(ociCloudProvider)
+	coreControllers := corecontrollers.NewControllers(
+		ctx,
+		op.Manager,
+		op.Clock,
+		op.GetClient(),
+		op.EventRecorder,
+		cloudProvider,
+	)
 	op.
-		WithControllers(ctx, corecontrollers.NewControllers(
-			op.Clock,
-			op.GetClient(),
-			state.NewCluster(op.Clock, op.GetClient(), cloudProvider),
-			op.EventRecorder,
-			cloudProvider,
-		)...).
+		WithControllers(ctx, coreControllers...).
 		WithWebhooks(ctx, corewebhooks.NewWebhooks()...).
 		WithControllers(ctx, controllers.NewControllers(
 			ctx,
@@ -55,6 +56,7 @@ func main() {
 			op.EventRecorder,
 			op.ImageProvider,
 			op.SubnetProvider,
+			op.SecurityGroupProvider,
 		)...).
-		Start(ctx)
+		Start(ctx, cloudProvider)
 }

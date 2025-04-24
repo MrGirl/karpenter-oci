@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/awslabs/operatorpkg/status"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -35,20 +36,22 @@ import (
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/providers/instancetype"
 	"karpenter-oci/pkg/test"
-	. "knative.dev/pkg/logging/testing"
 	"knative.dev/pkg/ptr"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 	"sort"
 	"testing"
 
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -66,15 +69,15 @@ func TestInstanceType(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...), coretest.WithFieldIndexers(test.OciNodeClassFieldIndexer(ctx)))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}}))
 	ociEnv = test.NewEnvironment(ctx, env)
 	fakeClock = &clock.FakeClock{}
 	cloudProvider = cloudprovider.New(ociEnv.InstanceTypesProvider, ociEnv.InstanceProvider, events.NewRecorder(&record.FakeRecorder{}),
 		env.Client, ociEnv.AMIProvider)
-	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster)
+	cluster = state.NewCluster(fakeClock, env.Client)
+	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster, fakeClock)
 })
 
 var _ = AfterSuite(func() {
@@ -83,36 +86,36 @@ var _ = AfterSuite(func() {
 
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}}))
 	cluster.Reset()
 	ociEnv.Reset()
 	ociEnv.LaunchTemplateProvider.ClusterEndpoint = "https://test-cluster"
 })
 
 var _ = AfterEach(func() {
-	test.ExpectCleanedUp(ctx, env.Client)
+	ExpectCleanedUp(ctx, env.Client)
 })
 
 var _ = Describe("InstanceTypeProvider", func() {
 	var nodeClass *v1alpha1.OciNodeClass
-	var nodePool *corev1beta1.NodePool
+	var nodePool *karpv1.NodePool
 	BeforeEach(func() {
 		nodeClass = test.OciNodeClass()
-		nodePool = coretest.NodePool(corev1beta1.NodePool{
-			Spec: corev1beta1.NodePoolSpec{
-				Template: corev1beta1.NodeClaimTemplate{
-					Spec: corev1beta1.NodeClaimSpec{
-						Requirements: []corev1beta1.NodeSelectorRequirementWithMinValues{
+		nodeClass.StatusConditions().SetTrue(status.ConditionReady)
+		nodePool = coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 							{
 								NodeSelectorRequirement: v1.NodeSelectorRequirement{
-									Key:      corev1beta1.CapacityTypeLabelKey,
+									Key:      karpv1.CapacityTypeLabelKey,
 									Operator: v1.NodeSelectorOpIn,
-									Values:   []string{corev1beta1.CapacityTypeOnDemand},
+									Values:   []string{karpv1.CapacityTypeOnDemand},
 								},
 							},
 						},
-						Kubelet: &corev1beta1.KubeletConfiguration{},
-						NodeClassRef: &corev1beta1.NodeClassReference{
+						NodeClassRef: &karpv1.NodeClassReference{
 							Name: nodeClass.Name,
 						},
 					},
@@ -122,42 +125,45 @@ var _ = Describe("InstanceTypeProvider", func() {
 	})
 
 	It("should support individual instance type labels", func() {
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 
 		nodeSelector := map[string]string{
 			// Well known
-			corev1beta1.NodePoolLabelKey:    nodePool.Name,
+			karpv1.NodePoolLabelKey:         nodePool.Name,
 			v1.LabelTopologyZone:            "US-ASHBURN-AD-1",
 			v1.LabelTopologyRegion:          "us-ashburn-1",
-			v1.LabelInstanceTypeStable:      "shape-2",
+			v1.LabelInstanceTypeStable:      "shape-gpu",
 			v1.LabelOSStable:                "linux",
-			v1.LabelArchStable:              "amd",
+			v1.LabelArchStable:              "amd64",
 			v1.LabelFailureDomainBetaZone:   "US-ASHBURN-AD-1",
 			v1.LabelFailureDomainBetaRegion: "us-ashburn-1",
-			"beta.kubernetes.io/arch":       "amd",
+			"beta.kubernetes.io/arch":       "amd64",
 			"beta.kubernetes.io/os":         "linux",
-			v1.LabelInstanceType:            "shape-2",
+			v1.LabelInstanceType:            "shape-gpu",
 
-			corev1beta1.CapacityTypeLabelKey: "on-demand",
+			karpv1.CapacityTypeLabelKey: "on-demand",
 			// Well Known to OCI
-			v1alpha1.LabelInstanceShapeName:        "shape-2",
+			v1alpha1.LabelInstanceShapeName:        "shape-gpu",
 			v1alpha1.LabelInstanceCPU:              "2",
 			v1alpha1.LabelInstanceMemory:           "8192",
 			v1alpha1.LabelInstanceNetworkBandwidth: "10",
 			v1alpha1.LabelInstanceMaxVNICs:         "1",
+			v1alpha1.LabelIsFlexible:               "false",
+			v1alpha1.LabelInstanceGPU:              "1",
+			v1alpha1.LabelInstanceGPUDescription:   "A100",
 		}
 
 		// Ensure that we're exercising all well known labels
-		Expect(lo.Keys(nodeSelector)).To(ContainElements(append(corev1beta1.WellKnownLabels.Difference(sets.New(
-			v1.LabelWindowsBuild)).UnsortedList(), lo.Keys(corev1beta1.NormalizedLabels)...)))
+		Expect(lo.Keys(nodeSelector)).To(ContainElements(append(karpv1.WellKnownLabels.Difference(sets.New(
+			v1.LabelWindowsBuild)).UnsortedList(), lo.Keys(karpv1.NormalizedLabels)...)))
 
 		var pods []*v1.Pod
 		for key, value := range nodeSelector {
 			pods = append(pods, coretest.UnschedulablePod(coretest.PodOptions{NodeSelector: map[string]string{key: value}}))
 		}
-		test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 		for _, pod := range pods {
-			test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectScheduled(ctx, env.Client, pod)
 		}
 	})
 	It("should order the instance types by price and only consider the cheapest ones", func() {
@@ -166,15 +172,15 @@ var _ = Describe("InstanceTypeProvider", func() {
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(item)
 		})
 
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 		pod := coretest.UnschedulablePod(coretest.PodOptions{
 			ResourceRequirements: v1.ResourceRequirements{
 				Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1")},
 				Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1")},
 			},
 		})
-		test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-		test.ExpectScheduled(ctx, env.Client, pod)
+		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+		ExpectScheduled(ctx, env.Client, pod)
 		its, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
 		Expect(err).To(BeNil())
 		// Order all the instances by their price
@@ -198,37 +204,37 @@ var _ = Describe("InstanceTypeProvider", func() {
 		Expect(expected.Has(*call.Shape)).To(BeTrue(), fmt.Sprintf("expected %s to exist in set", *call.Shape))
 	})
 	It("should not launch instances w/ instance storage for ephemeral storage resource requests when exceeding blockDeviceMapping", func() {
-		test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 		pod := coretest.UnschedulablePod(coretest.PodOptions{
 			ResourceRequirements: v1.ResourceRequirements{
 				Requests: v1.ResourceList{v1.ResourceEphemeralStorage: resource.MustParse("5000Gi")},
 			},
 		})
-		test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-		test.ExpectNotScheduled(ctx, env.Client, pod)
+		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+		ExpectNotScheduled(ctx, env.Client, pod)
 	})
 	It("should not set pods to 110", func() {
-		instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx, nodeClass)
+		instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 		Expect(err).To(BeNil())
 		for _, info := range instanceInfo {
 			it := instancetype.NewInstanceType(ctx,
 				info,
 				nodeClass,
-				nodePool.Spec.Template.Spec.Kubelet,
+				nodeClass.Spec.Kubelet,
 				"us-ashburn-1",
 				[]string{"us-east-1"},
-				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu),
+				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 			)
 			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 110))
 		}
 	})
 	Context("Metrics", func() {
 		It("should expose vcpu metrics for instance types", func() {
-			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodePool.Spec.Template.Spec.Kubelet, nodeClass)
+			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodeClass.Spec.Kubelet, nodeClass)
 			Expect(err).To(BeNil())
 			Expect(len(instanceTypes)).To(BeNumerically(">", 0))
 			for _, it := range instanceTypes {
-				metric, ok := test.FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_cpu_cores", map[string]string{
+				metric, ok := FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_cpu_cores", map[string]string{
 					"instance_type": it.Name,
 				})
 				Expect(ok).To(BeTrue())
@@ -238,11 +244,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}
 		})
 		It("should expose memory metrics for instance types", func() {
-			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodePool.Spec.Template.Spec.Kubelet, nodeClass)
+			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodeClass.Spec.Kubelet, nodeClass)
 			Expect(err).To(BeNil())
 			Expect(len(instanceTypes)).To(BeNumerically(">", 0))
 			for _, it := range instanceTypes {
-				metric, ok := test.FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_memory_bytes", map[string]string{
+				metric, ok := FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_memory_bytes", map[string]string{
 					"instance_type": it.Name,
 				})
 				Expect(ok).To(BeTrue())
@@ -252,15 +258,15 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}
 		})
 		It("should expose availability metrics for instance types", func() {
-			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodePool.Spec.Template.Spec.Kubelet, nodeClass)
+			instanceTypes, err := ociEnv.InstanceTypesProvider.List(ctx, nodeClass.Spec.Kubelet, nodeClass)
 			Expect(err).To(BeNil())
 			Expect(len(instanceTypes)).To(BeNumerically(">", 0))
 			for _, it := range instanceTypes {
 				for _, of := range it.Offerings {
-					metric, ok := test.FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_offering_available", map[string]string{
+					metric, ok := FindMetricWithLabelValues("karpenter_cloudprovider_instance_type_offering_available", map[string]string{
 						"instance_type": it.Name,
-						"capacity_type": of.CapacityType,
-						"zone":          of.Zone,
+						"capacity_type": of.Requirements.Get(karpv1.CapacityTypeLabelKey).Any(),
+						"zone":          of.Requirements.Get(v1.LabelTopologyZone).Any(),
 					})
 					Expect(ok).To(BeTrue())
 					Expect(metric).To(Not(BeNil()))
@@ -276,11 +282,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 
 		BeforeEach(func() {
 			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
-				ClusterName: lo.ToPtr("karpenter-cluster"),
+				ClusterName: lo.ToPtr("karpenter-cluster"), AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1"},
 			}))
 
 			var ok bool
-			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx, nodeClass)
+			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 			Expect(err).To(BeNil())
 			for _, val := range instanceInfo {
 				if *val.Shape.Shape == "shape-1" {
@@ -290,22 +296,23 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}
 			Expect(ok).To(BeTrue())
 		})
+
 		Context("System Reserved Resources", func() {
 			It("should use defaults when no kubelet is specified", func() {
 				it := instancetype.NewInstanceType(
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("100m"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("100Mi"))
 			})
 			It("should override system reserved cpus when specified", func() {
-				nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{
+				nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 					SystemReserved: map[string]string{
 						string(v1.ResourceCPU):              "2",
 						string(v1.ResourceMemory):           "20Gi",
@@ -316,10 +323,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
@@ -328,22 +335,22 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		Context("Kube Reserved Resources", func() {
 			It("should use defaults when no kubelet is specified", func() {
-				nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{}
+				nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 				it := instancetype.NewInstanceType(
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("70m"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("1Gi"))
 				Expect(it.Overhead.KubeReserved.StorageEphemeral().String()).To(Equal("1Gi"))
 			})
 			It("should override kube reserved when specified", func() {
-				nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{
+				nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 					SystemReserved: map[string]string{
 						string(v1.ResourceCPU):              "1",
 						string(v1.ResourceMemory):           "20Gi",
@@ -359,10 +366,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("10Gi"))
@@ -372,27 +379,27 @@ var _ = Describe("InstanceTypeProvider", func() {
 		Context("Eviction Thresholds", func() {
 			BeforeEach(func() {
 				ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
-					VMMemoryOverheadPercent: lo.ToPtr[float64](0),
+					VMMemoryOverheadPercent: lo.ToPtr[float64](0.075), AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1"},
 				}))
 			})
 			It("should take the default eviction threshold when none is specified", func() {
-				nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{}
+				nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 				it := instancetype.NewInstanceType(
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
-				Expect(it.Overhead.EvictionThreshold.Memory().String()).To(Equal("750Mi"))
+				Expect(it.Overhead.EvictionThreshold.Memory().String()).To(Equal("100Mi"))
 			})
 		})
 		It("should set max-pods to user-defined value if specified", func() {
-			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx, nodeClass)
+			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 			Expect(err).To(BeNil())
-			nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{
+			nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 				MaxPods: ptr.Int32(10),
 			}
 			for _, info := range instanceInfo {
@@ -400,18 +407,18 @@ var _ = Describe("InstanceTypeProvider", func() {
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 10))
 			}
 		})
 		It("should override pods-per-core value", func() {
-			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx, nodeClass)
+			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 			Expect(err).To(BeNil())
-			nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{
+			nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 				PodsPerCore: ptr.Int32(1),
 			}
 			for _, info := range instanceInfo {
@@ -419,18 +426,18 @@ var _ = Describe("InstanceTypeProvider", func() {
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", info.CalcCpu))
 			}
 		})
 		It("should take the minimum of pods-per-core and max-pods", func() {
-			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx, nodeClass)
+			instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 			Expect(err).To(BeNil())
-			nodePool.Spec.Template.Spec.Kubelet = &corev1beta1.KubeletConfiguration{
+			nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 				PodsPerCore: ptr.Int32(4),
 				MaxPods:     ptr.Int32(20),
 			}
@@ -439,10 +446,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 					ctx,
 					info,
 					nodeClass,
-					nodePool.Spec.Template.Spec.Kubelet,
+					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu),
+					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", lo.Min([]int64{20, info.CalcCpu * 4})))
 			}
@@ -464,7 +471,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
 				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
 
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
+				EvictionHard: map[string]string{"memory.available": "750Mi"},
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			its, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
 			Expect(err).To(BeNil())
 
@@ -483,23 +493,23 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}{
 				{
 					InstanceType: "t4g.small",
-					Memory:       resource.MustParse("1408312Ki"),
-					CPU:          resource.MustParse("1930m"),
+					Memory:       resource.MustParse("2062131Ki"),
+					CPU:          resource.MustParse("1830m"),
 				},
 				{
 					InstanceType: "t4g.medium",
-					Memory:       resource.MustParse("3377496Ki"),
-					CPU:          resource.MustParse("1930m"),
+					Memory:       resource.MustParse("5840486Ki"),
+					CPU:          resource.MustParse("3815m"),
 				},
 				{
 					InstanceType: "t4g.xlarge",
-					Memory:       resource.MustParse("15136012Ki"),
-					CPU:          resource.MustParse("3920m"),
+					Memory:       resource.MustParse("12551372Ki"),
+					CPU:          resource.MustParse("7803m"),
 				},
 				{
 					InstanceType: "m5.large",
-					Memory:       resource.MustParse("7220184Ki"),
-					CPU:          resource.MustParse("1930m"),
+					Memory:       resource.MustParse("5840486Ki"),
+					CPU:          resource.MustParse("3815m"),
 				},
 			} {
 				it, ok := instanceTypes[tc.InstanceType]
@@ -517,8 +527,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 	})
 	Context("Insufficient Capacity Error Cache", func() {
 		It("should launch instances of different type on second reconciliation attempt with Insufficient Capacity Error Cache fallback", func() {
-			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-1"}})
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-2", Zone: "US-ASHBURN-AD-1"}})
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pods := []*v1.Pod{
 				coretest.UnschedulablePod(coretest.PodOptions{
 					NodeSelector: map[string]string{v1.LabelTopologyZone: "US-ASHBURN-AD-1"},
@@ -535,21 +545,21 @@ var _ = Describe("InstanceTypeProvider", func() {
 					},
 				}),
 			}
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 			// it should've tried to pack them on a single shape-3 then hit an insufficient capacity error
 			for _, pod := range pods {
-				test.ExpectNotScheduled(ctx, env.Client, pod)
+				ExpectNotScheduled(ctx, env.Client, pod)
 			}
 			nodeNames := sets.NewString()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 			for _, pod := range pods {
-				node := test.ExpectScheduled(ctx, env.Client, pod)
+				node := ExpectScheduled(ctx, env.Client, pod)
 				nodeNames.Insert(node.Name)
 			}
 			Expect(nodeNames.Len()).To(Equal(1))
 		})
 		It("should launch instances in a different zone on second reconciliation attempt with Insufficient Capacity Error Cache fallback", func() {
-			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-2", Zone: "US-ASHBURN-AD-1"}})
+			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-2", Zone: "US-ASHBURN-AD-1"}})
 			pod := coretest.UnschedulablePod(coretest.PodOptions{
 				NodeSelector: map[string]string{v1.LabelInstanceTypeStable: "shape-2"},
 				ResourceRequirements: v1.ResourceRequirements{
@@ -564,13 +574,13 @@ var _ = Describe("InstanceTypeProvider", func() {
 					}},
 				},
 			}}}
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
 			// it should've tried to pack them in test-zone-1a on a p3.8xlarge then hit insufficient capacity, the next attempt will try test-zone-1b
-			test.ExpectNotScheduled(ctx, env.Client, pod)
+			ExpectNotScheduled(ctx, env.Client, pod)
 
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			node := test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
 			Expect(node.Labels).To(SatisfyAll(
 				HaveKeyWithValue(v1.LabelInstanceTypeStable, "shape-2"),
 				SatisfyAny(
@@ -580,13 +590,13 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		It("should launch smaller instances than optimal if larger instance launch results in Insufficient Capacity Error", func() {
 			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{
-				{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-1"},
+				{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-2", Zone: "US-ASHBURN-AD-1"},
 			})
-			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, corev1beta1.NodeSelectorRequirementWithMinValues{
+			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
 				NodeSelectorRequirement: v1.NodeSelectorRequirement{
 					Key:      v1.LabelInstanceType,
 					Operator: v1.NodeSelectorOpIn,
-					Values:   []string{"shape-3", "shape-2"},
+					Values:   []string{"shape-1", "shape-2"},
 				},
 			})
 			pods := []*v1.Pod{}
@@ -601,25 +611,25 @@ var _ = Describe("InstanceTypeProvider", func() {
 				}))
 			}
 			// Provisions 2 shape-2 instances since shape-3 was insufficient
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 			for _, pod := range pods {
-				test.ExpectNotScheduled(ctx, env.Client, pod)
+				ExpectNotScheduled(ctx, env.Client, pod)
 			}
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 			for _, pod := range pods {
-				node := test.ExpectScheduled(ctx, env.Client, pod)
-				Expect(node.Labels[v1.LabelInstanceTypeStable]).To(Equal("shape-2"))
+				node := ExpectScheduled(ctx, env.Client, pod)
+				Expect(node.Labels[v1.LabelInstanceTypeStable]).To(Equal("shape-1"))
 			}
 		})
 		It("should return all instance types, even though with no offerings due to Insufficient Capacity Error", func() {
 			ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{
-				{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-1"},
-				{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-2"},
-				{CapacityType: corev1beta1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-3"},
+				{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-1"},
+				{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-2"},
+				{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: "shape-3", Zone: "US-ASHBURN-AD-3"},
 			})
 			nodePool.Spec.Template.Spec.Requirements = nil
-			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, corev1beta1.NodeSelectorRequirementWithMinValues{
+			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
 				NodeSelectorRequirement: v1.NodeSelectorRequirement{
 					Key:      v1.LabelInstanceType,
 					Operator: v1.NodeSelectorOpIn,
@@ -627,25 +637,25 @@ var _ = Describe("InstanceTypeProvider", func() {
 				},
 			},
 			)
-			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, corev1beta1.NodeSelectorRequirementWithMinValues{
+			nodePool.Spec.Template.Spec.Requirements = append(nodePool.Spec.Template.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
 				NodeSelectorRequirement: v1.NodeSelectorRequirement{
-					Key:      corev1beta1.CapacityTypeLabelKey,
+					Key:      karpv1.CapacityTypeLabelKey,
 					Operator: v1.NodeSelectorOpIn,
 					Values:   []string{"on-demand"},
 				},
 			})
 
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
-			for _, ct := range []string{corev1beta1.CapacityTypeOnDemand, corev1beta1.CapacityTypeSpot} {
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			for _, ct := range []string{karpv1.CapacityTypeOnDemand, karpv1.CapacityTypeSpot} {
 				for _, zone := range []string{"US-ASHBURN-AD-1", "US-ASHBURN-AD-2", "US-ASHBURN-AD-3"} {
-					test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov,
+					ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov,
 						coretest.UnschedulablePod(coretest.PodOptions{
 							ResourceRequirements: v1.ResourceRequirements{
 								Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1")},
 							},
 							NodeSelector: map[string]string{
-								corev1beta1.CapacityTypeLabelKey: ct,
-								v1.LabelTopologyZone:             zone,
+								karpv1.CapacityTypeLabelKey: ct,
+								v1.LabelTopologyZone:        zone,
 							},
 						}))
 				}
@@ -667,11 +677,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 	})
 	Context("CapacityType", func() {
 		It("should default to on-demand", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			node := test.ExpectScheduled(ctx, env.Client, pod)
-			Expect(node.Labels).To(HaveKeyWithValue(corev1beta1.CapacityTypeLabelKey, corev1beta1.CapacityTypeOnDemand))
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
+			Expect(node.Labels).To(HaveKeyWithValue(karpv1.CapacityTypeLabelKey, karpv1.CapacityTypeOnDemand))
 		})
 	})
 	Context("Ephemeral Storage", func() {
@@ -682,10 +692,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}
 		})
 		It("should default to EBS defaults when volumeSize is not defined in blockDeviceMappings for AL2 Root volume", func() {
-			test.ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
-			test.ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
-			node := test.ExpectScheduled(ctx, env.Client, pod)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
 			Expect(*node.Status.Capacity.StorageEphemeral()).To(Equal(resource.MustParse("100Gi")))
 			Expect(ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.Len()).To(BeNumerically(">=", 1))
 			ociEnv.CmpCli.LaunchInstanceBehavior.CalledWithInput.ForEach(func(ltInput *core.LaunchInstanceRequest) {
@@ -698,6 +708,44 @@ var _ = Describe("InstanceTypeProvider", func() {
 				Expect(lo.FromPtr(volumeAttr.SizeInGBs)).To(Equal(int64(100)))
 				Expect(lo.FromPtr(volumeAttr.VpusPerGB)).To(Equal(int64(20)))
 			})
+		})
+	})
+	Context("Flex instance type", func() {
+		BeforeEach(func() {
+			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
+				FlexCpuMemRatios: common.String("2,4"), FlexCpuConstrainList: common.String("1,2"), AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1"},
+			}))
+		})
+		It("pod should schedule one suitable flex instance type", func() {
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("flex_instance"),
+				IsFlexible: common.Bool(true), OcpuOptions: &core.ShapeOcpuOptions{
+					Min: common.Float32(1),
+					Max: common.Float32(16),
+				}, MemoryOptions: &core.ShapeMemoryOptions{
+					MinInGBs: common.Float32(2),
+					MaxInGBs: common.Float32(128),
+				},
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+			pod := coretest.UnschedulablePod(coretest.PodOptions{
+				NodeSelector: map[string]string{v1.LabelInstanceTypeStable: "flex_instance"},
+				ResourceRequirements: v1.ResourceRequirements{
+					Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1"), v1.ResourceMemory: resource.MustParse("5Gi")},
+				},
+			})
+			pod.Spec.Affinity = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+				{
+					Weight: 1, Preference: v1.NodeSelectorTerm{MatchExpressions: []v1.NodeSelectorRequirement{
+						{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
+					}},
+				},
+			}}}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
+			Expect(node.Labels).To(SatisfyAll(
+				HaveKeyWithValue(v1.LabelInstanceTypeStable, "flex_instance"),
+				HaveKeyWithValue(v1alpha1.LabelInstanceCPU, "2"),
+				HaveKeyWithValue(v1alpha1.LabelInstanceMemory, "8192")))
 		})
 	})
 })

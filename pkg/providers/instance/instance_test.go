@@ -32,16 +32,17 @@ import (
 	"karpenter-oci/pkg/providers/securitygroup"
 	"karpenter-oci/pkg/providers/subnet"
 	"karpenter-oci/pkg/test"
-	knative_t "knative.dev/pkg/logging/testing"
-	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 	"testing"
 )
 
 func initProvider(t *testing.T) *instance.Provider {
-	ctx := knative_t.TestContextWithLogger(t)
+	ctx := TestContextWithLogger(t)
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	conf := common.CustomProfileSessionTokenConfigProvider("~/.oci/config", "SESSION")
@@ -76,7 +77,7 @@ func TestLaunchInstance(t *testing.T) {
 			BlockDevices: []*v1alpha1.VolumeAttributes{{SizeInGBs: 100, VpusPerGB: 20}},
 		},
 	}
-	ins, err := instanceProvider.Create(ctx, nodeClass, &v1beta1.NodeClaim{}, []*corecloudprovider.InstanceType{})
+	ins, err := instanceProvider.Create(ctx, nodeClass, &v1.NodeClaim{}, []*corecloudprovider.InstanceType{})
 	if err != nil {
 		t.Fail()
 		return

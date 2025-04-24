@@ -28,18 +28,19 @@ import (
 	"karpenter-oci/pkg/fake"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
-	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	"karpenter-oci/pkg/utils"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -54,7 +55,7 @@ func TestInstance(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	ociEnv = test.NewEnvironment(ctx, env)
@@ -68,45 +69,46 @@ var _ = AfterSuite(func() {
 
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
-	ctx = options.ToContext(ctx, test.Options())
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{AvailableDomains: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}}))
 	ociEnv.Reset()
 })
 
 var _ = Describe("InstanceProvider", func() {
 	var nodeClass *v1alpha1.OciNodeClass
-	var nodePool *v1beta1.NodePool
-	var nodeClaim *v1beta1.NodeClaim
+	var nodePool *v1.NodePool
+	var nodeClaim *v1.NodeClaim
 	BeforeEach(func() {
 		nodeClass = test.OciNodeClass()
-		nodePool = coretest.NodePool(v1beta1.NodePool{
-			Spec: v1beta1.NodePoolSpec{
-				Template: v1beta1.NodeClaimTemplate{
-					Spec: v1beta1.NodeClaimSpec{
-						NodeClassRef: &v1beta1.NodeClassReference{
+		nodePool = coretest.NodePool(v1.NodePool{
+			Spec: v1.NodePoolSpec{
+				Template: v1.NodeClaimTemplate{
+					Spec: v1.NodeClaimTemplateSpec{
+						NodeClassRef: &v1.NodeClassReference{
 							Name: nodeClass.Name,
 						},
 					},
 				},
 			},
 		})
-		nodeClaim = coretest.NodeClaim(v1beta1.NodeClaim{
+		nodeClaim = coretest.NodeClaim(v1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					v1beta1.NodePoolLabelKey: nodePool.Name,
+					v1.NodePoolLabelKey: nodePool.Name,
 				},
 			},
-			Spec: v1beta1.NodeClaimSpec{
-				NodeClassRef: &v1beta1.NodeClassReference{
+			Spec: v1.NodeClaimSpec{
+				NodeClassRef: &v1.NodeClassReference{
 					Name: nodeClass.Name,
 				},
 			},
 		})
 	})
 	It("should return an ICE error when all attempted instance types return an ICE error", func() {
-		test.ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
 		ociEnv.CmpCli.InsufficientCapacityPools.Set([]fake.CapacityPool{
-			{CapacityType: v1beta1.CapacityTypeOnDemand, InstanceType: "m5.xlarge", Zone: "test-zone-1a"},
-			{CapacityType: v1beta1.CapacityTypeOnDemand, InstanceType: "m5.xlarge", Zone: "test-zone-1b"},
+			{CapacityType: v1.CapacityTypeOnDemand, InstanceType: "m5.xlarge", Zone: "US-ASHBURN-AD-1"},
+			{CapacityType: v1.CapacityTypeOnDemand, InstanceType: "m5.xlarge", Zone: "US-ASHBURN-AD-2"},
+			{CapacityType: v1.CapacityTypeOnDemand, InstanceType: "m5.xlarge", Zone: "US-ASHBURN-AD-3"},
 		})
 		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
 		Expect(err).ToNot(HaveOccurred())
@@ -130,10 +132,10 @@ var _ = Describe("InstanceProvider", func() {
 					Id:          common.String(instanceID),
 					Shape:       common.String("VM.Standard.E4.Flex"),
 					DisplayName: common.String("test-cluster-karpenter"),
-					FreeformTags: map[string]string{
-						v1beta1.NodePoolLabelKey:       "default",
-						v1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
-						v1alpha1.LabelNodeClass:        "default"},
+					DefinedTags: map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: {
+						utils.SafeTagKey(v1.NodePoolLabelKey):             "default",
+						utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey): options.FromContext(ctx).ClusterName,
+						utils.SafeTagKey(v1alpha1.LabelNodeClass):         "default"}},
 					TimeCreated: &common.SDKTime{Time: time.Now().Add(-time.Minute)},
 				},
 			)

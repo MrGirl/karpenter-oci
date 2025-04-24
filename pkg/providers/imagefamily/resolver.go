@@ -17,14 +17,13 @@ package imagefamily
 import (
 	"context"
 	"fmt"
-	"github.com/imdario/mergo"
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	"karpenter-oci/pkg/utils"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/utils/resources"
 )
 
 const (
@@ -68,10 +67,10 @@ type LaunchTemplate struct {
 type DefaultFamily struct{}
 
 type ImageFamily interface {
-	UserData(kubeletConfig *corev1beta1.KubeletConfiguration, taints []core.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper
+	UserData(kubeletConfig *v1alpha1.KubeletConfiguration, taints []core.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper
 }
 
-func (r Resolver) Resolve(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1beta1.NodeClaim, instanceType *cloudprovider.InstanceType, options *Options) ([]*LaunchTemplate, error) {
+func (r Resolver) Resolve(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *v1.NodeClaim, instanceType *cloudprovider.InstanceType, options *Options) ([]*LaunchTemplate, error) {
 	images, err := r.amiProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, err
@@ -102,29 +101,20 @@ func GetImageFamily(imageFamily string, options *Options) ImageFamily {
 	}
 }
 
-func (r Resolver) resolveLaunchTemplate(nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1beta1.NodeClaim, instanceType *cloudprovider.InstanceType, imageFamily ImageFamily, imageId string, options *Options) (*LaunchTemplate, error) {
-	kubeletConfig := nodeClaim.Spec.Kubelet
+func (r Resolver) resolveLaunchTemplate(nodeClass *v1alpha1.OciNodeClass, nodeClaim *v1.NodeClaim, instanceType *cloudprovider.InstanceType, imageFamily ImageFamily, imageId string, options *Options) (*LaunchTemplate, error) {
+	kubeletConfig, err := utils.GetKubeletConfigurationWithNodeClaim(nodeClaim, nodeClass)
+	if err != nil {
+		return nil, fmt.Errorf("resolving kubelet configuration, %w", err)
+	}
 	if kubeletConfig == nil {
-		kubeletConfig = &corev1beta1.KubeletConfiguration{}
+		kubeletConfig = &v1alpha1.KubeletConfiguration{}
 	}
-
-	if len(kubeletConfig.KubeReserved) == 0 {
-		kubeletConfig.KubeReserved = resources.StringMap(instanceType.Overhead.KubeReserved)
-	}
-	if len(kubeletConfig.SystemReserved) == 0 {
-		kubeletConfig.SystemReserved = resources.StringMap(instanceType.Overhead.SystemReserved)
-	}
-	if len(kubeletConfig.EvictionHard) == 0 {
-		kubeletConfig.EvictionHard = map[string]string{MemoryAvailable: "750Mi", NodeFSAvailable: "10%", NodeFSInodesFree: "5%", ImageFSAvailable: "15%", ImageFSInodesFree: "10%"}
-	}
+	// nolint:gosec
+	// We know that it's not possible to have values that would overflow int32 here since we control
+	// the maxPods values that we pass in here
 	if kubeletConfig.MaxPods == nil {
-		kubeletConfig.MaxPods = lo.ToPtr(int32(instanceType.Capacity.Pods().Value()))
-	}
-
-	if nodeClaim.Spec.Kubelet != nil {
-		if err := mergo.Merge(kubeletConfig, nodeClaim.Spec.Kubelet); err != nil {
-			return nil, err
-		}
+		// todo match with instance type
+		kubeletConfig.MaxPods = lo.ToPtr(int32(110))
 	}
 	resolved := &LaunchTemplate{
 		Options: options,

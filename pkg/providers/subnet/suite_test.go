@@ -16,22 +16,26 @@ package subnet_test
 
 import (
 	"context"
+	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"karpenter-oci/pkg/apis"
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/operator/options"
 	"karpenter-oci/pkg/test"
+	"sigs.k8s.io/karpenter/pkg/test/expectations"
+	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+	"sort"
+	"sync"
 	"testing"
 
 	"github.com/samber/lo"
 
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "knative.dev/pkg/logging/testing"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -47,7 +51,7 @@ func TestSubnet(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
+	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...), coretest.WithFieldIndexers(test.OciNodeClassFieldIndexer(ctx)))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
@@ -63,13 +67,13 @@ var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
 	nodeClass = test.OciNodeClass(v1alpha1.OciNodeClass{
-		Spec: v1alpha1.OciNodeClassSpec{},
+		Spec: v1alpha1.OciNodeClassSpec{SubnetName: "private-1"},
 	})
 	ociEnv.Reset()
 })
 
 var _ = AfterEach(func() {
-	test.ExpectCleanedUp(ctx, env.Client)
+	expectations.ExpectCleanedUp(ctx, env.Client)
 })
 
 var _ = Describe("SubnetProvider", func() {
@@ -108,6 +112,39 @@ var _ = Describe("SubnetProvider", func() {
 				})
 			}
 		})
+	})
+	It("should not cause data races when calling List() simultaneously", func() {
+		wg := sync.WaitGroup{}
+		for i := 0; i < 10000; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer GinkgoRecover()
+				subnets, err := ociEnv.SubnetProvider.List(ctx, nodeClass)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(subnets).To(HaveLen(2))
+				// Sort everything in parallel and ensure that we don't get data races
+				sort.Slice(subnets, func(i, j int) bool {
+					return *subnets[i].Id < *subnets[j].Id
+				})
+				Expect(subnets).To(BeEquivalentTo([]core.Subnet{
+					{
+						CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+						Id:             common.String("ocid1.subnet.oc1.iad.aaaaaaaa"),
+						LifecycleState: core.SubnetLifecycleStateAvailable,
+						DisplayName:    common.String("private-1"),
+					},
+					{
+						CompartmentId:  common.String("ocid1.compartment.oc1..aaaaaaaa"),
+						Id:             common.String("ocid1.subnet.oc1.iad.aaaaaaab"),
+						LifecycleState: core.SubnetLifecycleStateAvailable,
+						DisplayName:    common.String("private-1"),
+					},
+				}))
+			}()
+		}
+		wg.Wait()
 	})
 })
 

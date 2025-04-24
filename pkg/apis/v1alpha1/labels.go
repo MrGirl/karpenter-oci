@@ -16,12 +16,13 @@ package v1alpha1
 
 import (
 	v1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	"sigs.k8s.io/karpenter/pkg/apis"
+	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 func init() {
-	v1beta1.RestrictedLabelDomains = v1beta1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
-	v1beta1.WellKnownLabels = v1beta1.WellKnownLabels.Insert(
+	corev1.RestrictedLabelDomains = corev1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
+	corev1.WellKnownLabels = corev1.WellKnownLabels.Insert(
 		LabelInstanceShapeName,
 		LabelInstanceCPU,
 		LabelInstanceGPU,
@@ -51,6 +52,8 @@ var (
 
 	AnnotationOciNodeClassHash        = Group + "/ocinodeclass-hash"
 	AnnotationOciNodeClassHashVersion = Group + "/ocinodeclass-hash-version"
+
+	ManagedByAnnotationKey = apis.Group + "/managed-by"
 
 	ResourceNVIDIAGPU v1.ResourceName = "nvidia.com/gpu"
 )

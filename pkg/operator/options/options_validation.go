@@ -42,8 +42,8 @@ func (o Options) validateEndpoint() error {
 }
 
 func (o Options) validateVMMemoryOverheadPercent() error {
-	if o.VMMemoryOverheadPercent < 0 {
-		return fmt.Errorf("vm-memory-overhead-percent cannot be negative")
+	if o.VMMemoryOverheadPercent < 0 || o.VMMemoryOverheadPercent > 1 {
+		return fmt.Errorf("vm-memory-overhead-percent cannot be negative or > 1")
 	}
 	return nil
 }

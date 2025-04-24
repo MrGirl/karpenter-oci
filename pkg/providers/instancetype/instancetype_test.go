@@ -31,7 +31,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"karpenter-oci/pkg/apis/v1alpha1"
 	"karpenter-oci/pkg/operator/options"
-	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"testing"
 )
 
@@ -40,20 +39,18 @@ func TestListInstanceType(t *testing.T) {
 	ctx = options.ToContext(ctx, &options.Options{
 		VMMemoryOverheadPercent: 0.075,
 	})
-	providerConfig := common.CustomProfileSessionTokenConfigProvider("~/.oci/config", "SESSION")
+	providerConfig := common.CustomProfileSessionTokenConfigProvider("/Users/nathan.yuan/.oci/config", "SESSION")
 	client, err := core.NewComputeClientWithConfigurationProvider(providerConfig)
 	region := lo.Must(providerConfig.Region())
 	unavailableCache := ocicache.NewUnavailableOfferings()
 	provider := instancetype.NewProvider(region, client, cache.New(ocicache.InstanceTypesAndZonesTTL, ocicache.DefaultCleanupInterval), unavailableCache)
-	types, err := provider.List(ctx, &v1beta1.KubeletConfiguration{
+	types, err := provider.List(ctx, &v1alpha1.KubeletConfiguration{
 		MaxPods:        nil,
 		PodsPerCore:    nil,
 		SystemReserved: nil,
 		KubeReserved:   nil,
 	}, &v1alpha1.OciNodeClass{
-		Spec: v1alpha1.OciNodeClassSpec{
-			InstanceShapeAds: []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"},
-		},
+		Spec: v1alpha1.OciNodeClassSpec{},
 	})
 	if err != nil {
 		t.Fail()
@@ -140,7 +137,7 @@ func TestAllocatable(t *testing.T) {
 	expectedMemory := "750Mi"
 	expectStorage := int64(15)
 	hardEvict := map[string]string{"memory.available": "750Mi", "nodefs.available": "15%"}
-	resources := instancetype.EvictionThreshold(core_resource.Quantity(fmt.Sprintf("%fGi", memory)), core_resource.Quantity(fmt.Sprintf("%fGi", storage)), hardEvict)
+	resources := instancetype.EvictionThreshold(core_resource.Quantity(fmt.Sprintf("%fGi", memory)), core_resource.Quantity(fmt.Sprintf("%fGi", storage)), &v1alpha1.KubeletConfiguration{EvictionHard: hardEvict})
 	gotStorage := resources[v1.ResourceEphemeralStorage]
 	gotMemory := resources[v1.ResourceMemory]
 

@@ -30,9 +30,11 @@ import (
 	"karpenter-oci/pkg/providers/subnet"
 	"karpenter-oci/pkg/utils"
 	"net/http"
-	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
+	"strconv"
+	"strings"
 )
 
 type Provider struct {
@@ -55,10 +57,13 @@ func NewProvider(compClient api.ComputeClient, subnetProvider *subnet.Provider, 
 	}
 }
 
-func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1beta1.NodeClaim, instanceTypes []*corecloudprovider.InstanceType) (*core.Instance, error) {
+func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1.NodeClaim, instanceTypes []*corecloudprovider.InstanceType) (*core.Instance, error) {
 	subnets, err := p.subnetProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, err
+	}
+	if len(subnets) == 0 {
+		return nil, fmt.Errorf("no subnets found for vcn: %s, name: %s", nodeClass.Spec.VcnId, nodeClass.Spec.SubnetName)
 	}
 	sgs, err := p.securityGroupProvider.List(ctx, nodeClass)
 	if err != nil {
@@ -68,6 +73,12 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 		return utils.ToString(item.Id)
 	})
 	instanceType, zone := pickBestInstanceType(nodeClaim, instanceTypes)
+	ad, ok := lo.Find(options.FromContext(ctx).AvailableDomains, func(item string) bool {
+		return strings.Contains(item, zone)
+	})
+	if !ok {
+		return nil, fmt.Errorf("failed to find a zone for %s, available az: %s", zone, options.FromContext(ctx).AvailableDomains)
+	}
 	if instanceType == nil {
 		return nil, corecloudprovider.NewInsufficientCapacityError(fmt.Errorf("no instance types available"))
 	}
@@ -91,6 +102,7 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 	if ssh != "" {
 		metadata["ssh_authorized_keys"] = ssh
 	}
+
 	req := core.LaunchInstanceRequest{LaunchInstanceDetails: core.LaunchInstanceDetails{
 		// todo subnet id balance
 		CreateVnicDetails:       &core.CreateVnicDetails{SubnetId: subnets[0].Id, NsgIds: sgsIds},
@@ -102,7 +114,7 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 		DefinedTags:        map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: getTags(ctx, nodeClass, nodeClaim)},
 		CompartmentId:      common.String(options.FromContext(ctx).CompartmentId),
 		DisplayName:        common.String(nodeClaim.ObjectMeta.Name),
-		AvailabilityDomain: common.String(fmt.Sprintf("%s:%s", options.FromContext(ctx).AvailableDomainPrefix, zone)),
+		AvailabilityDomain: common.String(ad),
 		Shape:              common.String(instanceType.Name),
 		Metadata:           metadata,
 		// use for debug agent
@@ -112,9 +124,16 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 	}}
 	// for flexible instance, specify the ocpu and memory
 	if instanceType.Requirements.Get(v1alpha1.LabelIsFlexible).Has("true") {
+		vcpuVal := instanceType.Requirements.Get(v1alpha1.LabelInstanceCPU).Values()
+		memoryInMiVal := instanceType.Requirements.Get(v1alpha1.LabelInstanceMemory).Values()
+		if len(vcpuVal) == 0 || len(memoryInMiVal) == 0 {
+			return nil, fmt.Errorf("failed to calculate cpu and memory for flex instance when creating instance, nodecliam: %s", nodeClaim.ObjectMeta.Name)
+		}
+		vcpu, _ := strconv.Atoi(vcpuVal[0])
+		memoryInMi, _ := strconv.Atoi(memoryInMiVal[0])
 		req.LaunchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
-			MemoryInGBs: common.Float32(float32(instanceType.Capacity.Memory().Value() / Gi)),
-			Ocpus:       common.Float32(float32(instanceType.Capacity.Cpu().Value()) / 2.0)}
+			MemoryInGBs: common.Float32(float32(memoryInMi / 1024)),
+			Ocpus:       common.Float32(float32(vcpu / 2.0))}
 	}
 	if nodeClass.Spec.LaunchOptions != nil {
 		launchOpts, err := utils.ConvertLaunchOptions(nodeClass.Spec.LaunchOptions)
@@ -134,11 +153,11 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 	return &resp.Instance, nil
 }
 
-func getTags(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1beta1.NodeClaim) map[string]interface{} {
+func getTags(ctx context.Context, nodeClass *v1alpha1.OciNodeClass, nodeClaim *corev1.NodeClaim) map[string]interface{} {
 	staticTags := map[string]string{
-		corev1beta1.NodePoolLabelKey:       nodeClaim.Labels[corev1beta1.NodePoolLabelKey],
-		corev1beta1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
-		v1alpha1.LabelNodeClass:            nodeClass.Name,
+		corev1.NodePoolLabelKey:         nodeClaim.Labels[corev1.NodePoolLabelKey],
+		v1alpha1.ManagedByAnnotationKey: options.FromContext(ctx).ClusterName,
+		v1alpha1.LabelNodeClass:         nodeClass.Name,
 	}
 	return removeExcludingChars(48, staticTags, nodeClass.Spec.Tags)
 }
@@ -160,11 +179,11 @@ func removeExcludingChars(sizeLimit int, tags ...map[string]string) map[string]i
 // todo verify with oci response
 func (p *Provider) updateUnavailableOfferingsCache(ctx context.Context, err error, instancetype string, zone string) {
 	if corecloudprovider.IsInsufficientCapacityError(err) {
-		p.unavailableOfferings.MarkUnavailableForLaunchInstanceErr(ctx, err, corev1beta1.CapacityTypeOnDemand, instancetype, zone)
+		p.unavailableOfferings.MarkUnavailableForLaunchInstanceErr(ctx, err, corev1.CapacityTypeOnDemand, instancetype, zone)
 	}
 }
 
-func pickBestInstanceType(nodeClaim *corev1beta1.NodeClaim, instanceTypes corecloudprovider.InstanceTypes) (*corecloudprovider.InstanceType, string) {
+func pickBestInstanceType(nodeClaim *corev1.NodeClaim, instanceTypes corecloudprovider.InstanceTypes) (*corecloudprovider.InstanceType, string) {
 	if len(instanceTypes) == 0 {
 		return nil, ""
 	}
@@ -173,12 +192,14 @@ func pickBestInstanceType(nodeClaim *corev1beta1.NodeClaim, instanceTypes corecl
 	// Zone - ideally random/spread from requested zones that support given Priority
 	requestedZones := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...).Get(v1.LabelTopologyZone)
 	priorityOfferings := lo.Filter(instanceType.Offerings.Available(), func(o corecloudprovider.Offering, _ int) bool {
-		return requestedZones.Has(o.Zone)
+		return requestedZones.Has(o.Requirements.Get(v1.LabelTopologyZone).Any())
 	})
 	if len(priorityOfferings) == 0 {
 		return nil, ""
 	}
-	zonesWithPriority := lo.Shuffle(lo.Map(priorityOfferings, func(o corecloudprovider.Offering, _ int) string { return o.Zone }))
+	zonesWithPriority := lo.Shuffle(lo.Map(priorityOfferings, func(o corecloudprovider.Offering, _ int) string {
+		return o.Requirements.Get(v1.LabelTopologyZone).Any()
+	}))
 	return instanceType, zonesWithPriority[0]
 }
 
@@ -198,12 +219,14 @@ func (p *Provider) Delete(ctx context.Context, id string) error {
 
 func (p *Provider) Get(ctx context.Context, id string) (*core.Instance, error) {
 	out, err := p.compClient.GetInstance(ctx, core.GetInstanceRequest{InstanceId: common.String(id)})
-	// todo deal not found error todo test api
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instances, %w", err)
+	}
 	if out.RawResponse != nil && out.RawResponse.StatusCode == http.StatusNotFound {
 		return nil, corecloudprovider.NewNodeClaimNotFoundError(err)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get instances, %w", err)
+	if out.Instance.LifecycleState == core.InstanceLifecycleStateTerminated {
+		return nil, corecloudprovider.NewNodeClaimNotFoundError(err)
 	}
 	return &out.Instance, nil
 }
@@ -227,7 +250,7 @@ func (p *Provider) List(ctx context.Context) ([]core.Instance, error) {
 			return nil, fmt.Errorf("list instances error, %w", err)
 		}
 		inses := lo.FilterMap[core.Instance, core.Instance](resp.Items, func(item core.Instance, index int) (core.Instance, bool) {
-			val, found := item.DefinedTags[options.FromContext(ctx).TagNamespace][utils.SafeTagKey(corev1beta1.ManagedByAnnotationKey)]
+			val, found := item.DefinedTags[options.FromContext(ctx).TagNamespace][utils.SafeTagKey(v1alpha1.ManagedByAnnotationKey)]
 			return item, found && val == options.FromContext(ctx).ClusterName
 		})
 		instances = append(instances, inses...)

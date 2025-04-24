@@ -29,9 +29,10 @@ type OptionsFields struct {
 	SshKey                  *string
 	CompartmentId           *string
 	VMMemoryOverheadPercent *float64
-	FlexCpuMemRatio         *int
+	FlexCpuMemRatios        *string
 	FlexCpuConstrainList    *string
-	AvailableDomainPrefix   *string
+	AvailableDomains        []string
+	TagNamespace            *string
 }
 
 func Options(overrides ...OptionsFields) *options.Options {
@@ -49,8 +50,9 @@ func Options(overrides ...OptionsFields) *options.Options {
 		SshKey:                  lo.FromPtrOr(opts.SshKey, "fake_token"),
 		CompartmentId:           lo.FromPtrOr(opts.CompartmentId, "fake_compartment_id"),
 		VMMemoryOverheadPercent: lo.FromPtrOr(opts.VMMemoryOverheadPercent, 0.075),
-		FlexCpuMemRatio:         lo.FromPtrOr(opts.FlexCpuMemRatio, 4),
+		FlexCpuMemRatios:        lo.FromPtrOr(opts.FlexCpuMemRatios, "4"),
 		FlexCpuConstrainList:    lo.FromPtrOr(opts.FlexCpuConstrainList, "2,4,8,16,32,48,64,96,128"),
-		AvailableDomainPrefix:   lo.FromPtrOr(opts.AvailableDomainPrefix, "JPqd"),
+		TagNamespace:            lo.FromPtrOr(opts.TagNamespace, "tag_namespace"),
+		AvailableDomains:        opts.AvailableDomains,
 	}
 }
