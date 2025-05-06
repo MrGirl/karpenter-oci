@@ -26,6 +26,7 @@ import (
 	ocicache "github.com/zoom/karpenter-oci/pkg/cache"
 	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
 	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/pricing"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -46,6 +47,7 @@ type Provider struct {
 	mu                   sync.Mutex
 	cache                *cache.Cache
 	unavailableOfferings *ocicache.UnavailableOfferings
+	priceSyncer          *pricing.PriceListSyncer
 }
 
 type WrapShape struct {
@@ -57,8 +59,8 @@ type WrapShape struct {
 	CalMaxBandwidthInGbps int64
 }
 
-func NewProvider(region string, compClient api.ComputeClient, cache *cache.Cache, unavailableOfferings *ocicache.UnavailableOfferings) *Provider {
-	return &Provider{region: region, compClient: compClient, cache: cache, unavailableOfferings: unavailableOfferings}
+func NewProvider(region string, compClient api.ComputeClient, cache *cache.Cache, unavailableOfferings *ocicache.UnavailableOfferings, priceSyncer *pricing.PriceListSyncer) *Provider {
+	return &Provider{region: region, compClient: compClient, cache: cache, unavailableOfferings: unavailableOfferings, priceSyncer: priceSyncer}
 }
 
 func (p *Provider) List(ctx context.Context, kc *v1alpha1.KubeletConfiguration, nodeClass *v1alpha1.OciNodeClass) ([]*cloudprovider.InstanceType, error) {
@@ -70,31 +72,29 @@ func (p *Provider) List(ctx context.Context, kc *v1alpha1.KubeletConfiguration, 
 	instanceTypes := make([]*cloudprovider.InstanceType, 0)
 	for _, wrapped := range wrapShapes {
 		// todo offers
-		instanceTypes = append(instanceTypes, NewInstanceType(ctx, wrapped, nodeClass, kc, p.region, wrapped.AvailableDomains, p.CreateOfferings(*wrapped.Shape.Shape, sets.New(wrapped.AvailableDomains...), wrapped.CalcCpu, wrapped.CalMemInGBs)))
+		instanceTypes = append(instanceTypes, NewInstanceType(ctx, wrapped, nodeClass, kc, p.region, wrapped.AvailableDomains, p.CreateOfferings(wrapped.Shape, sets.New(wrapped.AvailableDomains...))))
 	}
 	return instanceTypes, nil
 
 }
 
-func (p *Provider) CreateOfferings(shape string, zones sets.Set[string], oCpu int64, memory int64) []cloudprovider.Offering {
+func (p *Provider) CreateOfferings(shape core.Shape, zones sets.Set[string]) []cloudprovider.Offering {
 	var offerings []cloudprovider.Offering
 	// only on-demand support
 	for zone := range zones {
 		// exclude any offerings that have recently seen an insufficient capacity error
-		isUnavailable := p.unavailableOfferings.IsUnavailable(shape, zone, v1.CapacityTypeOnDemand)
-		// todo support pricing calculate
-		price := 8.0
+		isUnavailable := p.unavailableOfferings.IsUnavailable(*shape.Shape, zone, v1.CapacityTypeOnDemand) // todo support pricing calculate
 		offerings = append(offerings, cloudprovider.Offering{
 			Requirements: scheduling.NewRequirements(
 				scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
 				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
 			),
-			Price:     price*float64(oCpu) + float64(memory),
+			Price:     float64(pricing.Calculate(shape, p.priceSyncer.PriceCatalog)),
 			Available: !isUnavailable,
 		})
 		// metric
 		instanceTypeOfferingAvailable.With(prometheus.Labels{
-			instanceTypeLabel: shape,
+			instanceTypeLabel: *shape.Shape,
 			capacityTypeLabel: v1.CapacityTypeOnDemand,
 			zoneLabel:         zone,
 		}).Set(float64(lo.Ternary(!isUnavailable, 1, 0)))
