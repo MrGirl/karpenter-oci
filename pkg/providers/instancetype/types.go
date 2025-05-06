@@ -170,7 +170,7 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 		requirements[v1alpha1.LabelInstanceNetworkBandwidth].Insert(fmt.Sprint(lo.FromPtr(shape.NetworkingBandwidthInGbps)))
 	}
 	if shape.MaxVnicAttachments != nil {
-		requirements[v1alpha1.LabelInstanceMaxVNICs].Insert(fmt.Sprint(lo.FromPtr(shape.MaxVnicAttachments)))
+		requirements[v1alpha1.LabelInstanceMaxVNICs].Insert(fmt.Sprint(shape.CalMaxVnic))
 	}
 	if shape.Shape.Gpus != nil && lo.FromPtr(shape.Shape.Gpus) != 0 {
 		requirements[v1alpha1.LabelInstanceGPU].Insert(fmt.Sprint(nvidiaGPUs(shape.Shape).Value()))
@@ -184,10 +184,9 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 func computeCapacity(ctx context.Context, shape *WrapShape, kc *v1alpha1.KubeletConfiguration, nodeclass *v1alpha1.OciNodeClass) v1.ResourceList {
 
 	resourceList := v1.ResourceList{
-		v1.ResourceCPU:              *cpu(shape.CalcCpu),
-		v1.ResourceMemory:           *memory(ctx, shape.CalMemInGBs),
-		v1.ResourceEphemeralStorage: *ephemeralStorage(nodeclass),
-		// todo Maximum number of Pods per node = MIN( (Number of VNICs - 1) * 31 ), 110)
+		v1.ResourceCPU:                    *cpu(shape.CalcCpu),
+		v1.ResourceMemory:                 *memory(ctx, shape.CalMemInGBs),
+		v1.ResourceEphemeralStorage:       *ephemeralStorage(nodeclass),
 		v1.ResourcePods:                   *pods(shape, kc),
 		v1.ResourceName("nvidia.com/gpu"): *nvidiaGPUs(shape.Shape),
 	}
@@ -230,7 +229,8 @@ func pods(shape *WrapShape, kc *v1alpha1.KubeletConfiguration) *resource.Quantit
 	if kc != nil && kc.PodsPerCore != nil {
 		count = lo.Min([]int64{int64(ptr.Int32Value(kc.PodsPerCore)) * shape.CalcCpu, count})
 	}
-	return resources.Quantity(fmt.Sprint(count))
+	// Maximum number of Pods per node = MIN( (Number of VNICs - 1) * 31 ), 110)
+	return resources.Quantity(fmt.Sprint(min(count, (shape.CalMaxVnic-1)*31)))
 }
 
 func SystemReservedResources(kc *v1alpha1.KubeletConfiguration) v1.ResourceList {

@@ -64,7 +64,7 @@ func TestLaunchInstance(t *testing.T) {
 	nodeClass := &v1alpha1.OciNodeClass{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-cluster-nathan-karpenter",
+			Name: "test-cluster-karpenter",
 		},
 		Spec: v1alpha1.OciNodeClassSpec{
 			Image: &v1alpha1.Image{

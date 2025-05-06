@@ -39,7 +39,7 @@ func TestListInstanceType(t *testing.T) {
 	ctx = options.ToContext(ctx, &options.Options{
 		VMMemoryOverheadPercent: 0.075,
 	})
-	providerConfig := common.CustomProfileSessionTokenConfigProvider("/Users/nathan.yuan/.oci/config", "SESSION")
+	providerConfig := common.CustomProfileSessionTokenConfigProvider("~/.oci/config", "SESSION")
 	client, err := core.NewComputeClientWithConfigurationProvider(providerConfig)
 	region := lo.Must(providerConfig.Region())
 	unavailableCache := ocicache.NewUnavailableOfferings()

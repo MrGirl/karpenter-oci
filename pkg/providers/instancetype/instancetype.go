@@ -50,10 +50,9 @@ type Provider struct {
 
 type WrapShape struct {
 	core.Shape
-	CalcCpu          int64
-	CalMemInGBs      int64
-	AvailableDomains []string
-	// todo impl for flex
+	CalcCpu               int64
+	CalMemInGBs           int64
+	AvailableDomains      []string
 	CalMaxVnic            int64
 	CalMaxBandwidthInGbps int64
 }
@@ -178,6 +177,7 @@ func toWrapShape(ctx context.Context, shapes []core.Shape, ad string) []*WrapSha
 				CalcCpu:          int64(*shape.Ocpus) * 2,
 				CalMemInGBs:      int64(*shape.MemoryInGBs),
 				AvailableDomains: []string{ad},
+				CalMaxVnic:       int64(*shape.MaxVnicAttachments),
 			})
 		}
 	}
@@ -205,11 +205,24 @@ func splitFlexCpuMem(ctx context.Context, shape core.Shape, ad string) []*WrapSh
 			if cpus > int(*shape.OcpuOptions.Max) || memInGBs > int(*shape.MemoryOptions.MaxInGBs) {
 				continue
 			}
+			var calMaxVnic int64
+			// https://docs.oracle.com/en-us/iaas/Content/Compute/References/computeshapes.htm
+			if shape.MaxVnicAttachmentOptions != nil && shape.MaxVnicAttachmentOptions.DefaultPerOcpu != nil {
+				if cpus == 1 {
+					calMaxVnic = 2
+				} else {
+					calMaxVnic = int64(*shape.MaxVnicAttachmentOptions.DefaultPerOcpu) * int64(cpus)
+				}
+				calMaxVnic = min(24, calMaxVnic)
+			} else {
+				calMaxVnic = int64(*shape.MaxVnicAttachments)
+			}
 			wrapShapes = append(wrapShapes, &WrapShape{
 				Shape:            shape,
 				CalcCpu:          int64(cpus) * 2,
 				CalMemInGBs:      int64(memInGBs),
 				AvailableDomains: []string{ad},
+				CalMaxVnic:       calMaxVnic,
 			})
 		}
 	}
