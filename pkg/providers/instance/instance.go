@@ -92,16 +92,20 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 	if err != nil {
 		return nil, err
 	}
+	metadata := make(map[string]string, 0)
+	if nodeClass.Spec.MetaData != nil {
+		metadata = nodeClass.Spec.MetaData
+	}
+	// insert max pod and subnet info
+	if metadata["oke-native-pod-networking"] == "true" {
+		metadata["oke-max-pods"] = fmt.Sprint(instanceType.Capacity.Pods().Value())
+		metadata["pod-subnets"] = utils.ToString(subnets[0].Id)
+	}
 	userdata, err := template[0].UserData.Script()
 	if err != nil {
 		return nil, err
 	}
-	metadata := make(map[string]string, 0)
 	metadata["user_data"] = userdata
-	ssh := options.FromContext(ctx).SshKey
-	if ssh != "" {
-		metadata["ssh_authorized_keys"] = ssh
-	}
 
 	req := core.LaunchInstanceRequest{LaunchInstanceDetails: core.LaunchInstanceDetails{
 		// todo subnet id balance

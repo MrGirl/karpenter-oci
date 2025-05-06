@@ -35,6 +35,7 @@ type OciNodeClassSpec struct {
 	SecurityGroupNames []string          `json:"securityGroupNames,omitempty"`
 	UserData           *string           `json:"userData,omitempty"`
 	PreInstallScript   *string           `json:"preInstallScript,omitempty"`
+	MetaData           map[string]string `json:"metaData,omitempty"`
 	ImageFamily        string            `json:"imageFamily"`
 	Tags               map[string]string `json:"tags,omitempty"`
 	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.

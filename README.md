@@ -1,93 +1,209 @@
 # karpenter-oci
 
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://git.zoom.us/zoom-websrv-devops/karpenter-oci.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://git.zoom.us/zoom-websrv-devops/karpenter-oci/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
 ## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+karpenter-oci is the oracle cloud implement of karpenter, it depends on [karpenter](https://github.com/kubernetes-sigs/karpenter). It supports OKE cluster, and self-managed cluster on oracle cloud.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Arch Overview
+![Arch](designs/images/karpenter-oci-arch.png)
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
+## Feature
+1. Automatically scale up node capacity when available resources are insufficient
+2. Decommission idle nodes when no workload is present
+3. Support multi authenticate Method: resource principle, instance principle, api key, session
+4. Image is configurable
+5. Subnet is configurable
+6. Supports configuration of none or multiple security groups
+7. Support VM and Bare Metal
+8. Support attachment of additional disk
+9. Support specifying the kubelet configuration
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### prepare
+1. create a compartment, karpenter-oci will launch instance in this compartment
+2. create an OKE cluster under the above compartment
+3. create policy in oracle console, the name could like karpenter-oke-policy, the statements as below
+```
+Allow any-user to manage instance-family in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to manage instances in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to read instance-images in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to read app-catalog-listing in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to manage volume-family in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to manage volume-attachments in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use volumes in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use virtual-network-family in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to inspect vcns in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use subnets in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use network-security-groups in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use vnics in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+Allow any-user to use tag-namespaces in tenancy where all {request.principal.type = 'workload',request.principal.namespace = 'karpenter',request.principal.service_account = 'karpenter'}
+```
+4. create tag namespace, the namespace name could like `oke-karpenter-ns`, the required keys show in below sheet, if you want to attach more customer tags, you also can add them in the namespace.
 
+| key                              | description                                  |
+|:---------------------------------|:---------------------------------------------|
+| karpenter_k8s_oracle/ocinodeclass| the name of nodeclass used to crate instance |
+| karpenter_sh/managed-by          | the OKE cluster name                         |
+| karpenter_sh/nodepool            | the name of nodepool used to create instance |
+
+### install by helm
+```
+helm template karpenter ./karpenter-oci --version "1.0.9" --namespace "karpenter" --set "settings.clusterName=karpenter-oci-test" --set "settings.clusterEndpoint=https://10.0.0.8:6443" --set "settings.clusterDns=10.96.5.5" --set "settings.compartmentId=ocid1.compartment.oc1..aaaaaaaa" --set "settings.ociResourcePrincipalRegion=us-ashburn-1"
+```
+setting details
+
+| setting                    | description                                                                                                                                | default                      |
+|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|------------------------------|
+| clusterName                | cluster name                                                                                                                               |                              |
+| clusterEndpoint            | api server private endpoint                                                                                                                |                              |
+| clusterDns                 | IP addresses for the cluster DNS server, general is core dns ip                                                                            |                              |
+| compartmentId              | the compartment id or your worker nodes                                                                                                    |                              |
+| ociResourcePrincipalRegion | the region your cluster belong to, refer [issue](https://github.com/oracle/oci-go-sdk/issues/489                                           |                              |
+| ociAuthMethods             | API_KEY, OKE, SESSION, INSTANCE_PRINCIPAL                                                                                                  | OKE                          |
+| flexCpuConstrainList       | to constrain the ocpu cores of flex instance, instance create in this cpu size list, ocpu is twice of vcpu                                 | "1,2,4,8,16,32,48,64,96,128" |
+| flexCpuMemRatios           | the ratios of vcpu and mem, eg. FLEX_CPU_MEM_RATIOS=2,4, if create flex instance with 2 cores(1 ocpu), mem should be 4Gi or 8Gi            | "2,4,8"                      |
+| tagNamespace               | The tag namespace used to create and list instances by karpenter-oci, karpenter-oci will attach nodepool and nodeclass tag on the instance | oke-karpenter-ns             |
+| vmMemoryOverheadPercent    | he VM memory overhead as a percent that will be subtracted from the total memory for all instance types                                    | 0.075                        |
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### nodepool
+nodepool use to specify the disruption strategy, cpu and memory limits and requirements. The oracle feature requirement include the below labels:
+
+| label                                    | description                                                                                                           | example             |
+|------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|---------------------|
+| karpenter.k8s.oracle/instance-shape-name | the shape name                                                                                                        | VM.Standard.E4.Flex |
+| karpenter.k8s.oracle/instance-cpu        | the vcpu count of the instance shape, for flex shape, karpenter-oci will strictly create instance in these vcpu sizes | 4,8                 |
+| karpenter.k8s.oracle/instance-memory     | the memory size of the instance shape, the unit is MB                                                                 | 2048,4096           |
+| karpenter.k8s.oracle/instance-gpu        | the gpu card count of the instance shape                                                                              | 1                   |
+| karpenter.k8s.oracle/is-flexible         | the instance shape is flexible or not                                                                                 | "true"              |
+
+[example](pkg/apis/crd/sample/nodepool_sample.yaml)
+```yaml
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: karpenter-test
+spec:
+  disruption:
+    budgets:
+      - nodes: 10%
+    consolidateAfter: 30m0s
+    consolidationPolicy: WhenEmpty
+  limits:
+    cpu: 64
+    memory: 300Gi
+  template:
+    metadata:
+      labels:
+        servicegroup: karpenter-test
+    spec:
+      expireAfter: Never
+      nodeClassRef:
+        group: karpenter.k8s.oracle
+        kind: OciNodeClass
+        name: karpenter-test
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            - on-demand
+        - key: karpenter.k8s.oracle/instance-shape-name
+          operator: In
+          values:
+            - VM.Standard.E4.Flex
+        - key: karpenter.k8s.oracle/instance-cpu
+          operator: In
+          values:
+            - '4'
+            - '8'
+            - '16'
+        - key: kubernetes.io/os
+          operator: In
+          values:
+            - linux
+      terminationGracePeriod: 30m
+```
+### ocinodeclass
+the ocinodeclass is used for config the oracle cloud related resource, like OS image, subnet, security group, and also kubelet config.
+
+| spec                           | description                                                                                                         | required | example                                                                                                              |
+|--------------------------------|---------------------------------------------------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------|
+| bootConfig.bootVolumeSizeInGBs | The size of the boot volume in GBs. Minimum value is 50 GB and maximum value is 32,768 GB (32 TB).                  | yes      | 100                                                                                                                  |
+| bootConfig.bootVolumeVpusPerGB | The number of volume performance units (VPUs) that will be applied to this volume per GB                            | yes      | 10                                                                                                                   |
+| image.compartmentId            | the compartment id of the image                                                                                     | yes      | ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq                                  |
+| image.name                     | the image name                                                                                                      | yes      | Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760                                                                        |
+| launchOptions                  | LaunchOptions Options for tuning the compatibility and performance of VM shapes                                     | no       | [detail](https://docs.oracle.com/en-us/iaas/tools/python/2.150.3/api/core/models/oci.core.models.LaunchOptions.html) |
+| blockDevices                   | The details of the volume to create for CreateVolume operation.                                                     | no       | `sizeInGBs: 100` `vpusPerGB: 10`                                                                                     |
+| imageFamily                    | support OracleLinux and Ubuntu2204, for OKE cluster use `OracleLinux` and for self-managed cluster use `Ubuntu2204` | yes      | OracleLinux                                                                                                          |
+| vcnId                          | the vcnId of the cluster                                                                                            | yes      |                                                                                                                      |
+| subnetName                     | the name of the subnet which you want to create the worker nodes instance in                                        | yes      | oke-nodesubnet-quick-test                                                                                            |
+| securityGroupNames             | the security groups you want to attach to the instance                                                              | no       |                                                                                                                      |
+| tags                           | the tags you want to attach to the instance                                                                         | no       |                                                                                                                      |
+| metaData                       | specify for native cni cluster                                                                                      | no       | `{"oke-native-pod-networking":"true"}`                                                                               |
+| userData                       | customer userdata you want to run in the cloud-init script, it will execute before the kubelet start                | no       |                                                                                                                      |
+| kubelet                        | customer kubelet config                                                                                             | no       | [KubeletConfiguration](pkg/apis/v1alpha1/ocinodeclass.go)                                                            |
+
+- if your cluster use flannel as the cni, you can refer:
+[example](pkg/apis/crd/sample/oke_ocinodeclasses_sample.yaml)
+```yaml
+apiVersion: karpenter.k8s.oracle/v1alpha1
+kind: OciNodeClass
+metadata:
+  name: karpenter-test
+spec:
+  bootConfig:
+    bootVolumeSizeInGBs: 100
+    bootVolumeVpusPerGB: 10
+  image:
+    compartmentId: ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq
+    name: Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760
+  imageFamily: OracleLinux
+  kubelet:
+    evictionHard:
+      imagefs.available: 15%
+      imagefs.inodesFree: 10%
+      memory.available: 750Mi
+      nodefs.available: 10%
+      nodefs.inodesFree: 5%
+    systemReserved:
+      memory: 100Mi
+  subnetName: {{ .subnetName }}
+  vcnId: {{ .vcnId }}
+```
+- if your cluster use the native cni, you should set `oke-native-pod-networking` in the metadata as `true`, you can refer: [example](pkg/apis/crd/sample/oke_ocinodeclasses_native_cni_sample.yaml)
+```yaml
+apiVersion: karpenter.k8s.oracle/v1alpha1
+kind: OciNodeClass
+metadata:
+  name: karpenter-test
+spec:
+  bootConfig:
+    bootVolumeSizeInGBs: 100
+    bootVolumeVpusPerGB: 10
+  image:
+    compartmentId: ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq
+    name: Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760
+  imageFamily: OracleLinux
+  metaData:
+    oke-native-pod-networking: "true"
+  kubelet:
+    evictionHard:
+      imagefs.available: 15%
+      imagefs.inodesFree: 10%
+      memory.available: 750Mi
+      nodefs.available: 10%
+      nodefs.inodesFree: 5%
+    systemReserved:
+      memory: 100Mi
+  subnetName: {{ .subnetName }}
+  vcnId: {{ .vcnId }}
+```
 
 ## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
+If you meet any problem, welcome to raise a issue.
 ## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
+| item                          | date      |
+|-------------------------------|-----------|
+| update karpenter core to v1.4 | 2024.June |
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Contributing is welcome, you can raise a PR to add new feature or fix bugs. We use `envtest` to run the test suite, better add the related test case in your commit.
 
 ## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+http://www.apache.org/licenses/LICENSE-2.0

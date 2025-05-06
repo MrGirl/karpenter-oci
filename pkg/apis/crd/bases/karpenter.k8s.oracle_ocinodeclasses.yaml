@@ -239,6 +239,10 @@ spec:
                         volumes on platform images.
                       type: string
                   type: object
+                metaData:
+                  additionalProperties:
+                    type: string
+                  type: object
                 preInstallScript:
                   type: string
                 securityGroupNames:

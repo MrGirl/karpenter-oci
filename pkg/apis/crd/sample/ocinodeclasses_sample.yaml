@@ -1,7 +1,7 @@
 apiVersion: karpenter.k8s.oracle/v1alpha1
 kind: OciNodeClass
 metadata:
-  name: nathan-test
+  name: karpenter-test
 spec:
   blockDevices:
     - sizeInGBs: 100
