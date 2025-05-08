@@ -45,7 +45,8 @@ type Options struct {
 	AvailableDomains        []string
 	OciAuthMethods          string
 	PriceEndpoint           string
-	SyncPeriod              int64
+	PriceSyncPeriod         int64
+	UseLocalPriceList       bool
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -62,8 +63,8 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.StringVar(&o.OciAuthMethods, "oci-auth-methods", env.WithDefaultString("OCI_AUTH_METHODS", "OKE"), "[REQUIRED] the auth method to access oracle cloud resource, support OKE,API_KEY,SESSION,INSTANCE_PRINCIPAL")
 	fs.StringVar(&o.TagNamespace, "tag-namespace", env.WithDefaultString("TAG_NAMESPACE", "common-k8s"), "[REQUIRED] The tag namespace used to create and list instances")
 	fs.StringVar(&o.PriceEndpoint, "price-endpoint", env.WithDefaultString("PRICE_ENDPOINT", "https://apexapps.oracle.com/pls/apex/cetools/api/v1/products/"), "the endpoint which is used to pull price list from oci")
-	fs.Int64Var(&o.SyncPeriod, "sync-period", env.WithDefaultInt64("SYNC_PERIOD", 3600), "the seconds which is used to sync price list for the next time")
-
+	fs.Int64Var(&o.PriceSyncPeriod, "price-sync-period", env.WithDefaultInt64("PRICE_SYNC_PERIOD", 3600), "the seconds which is used to sync price list for the next time")
+	fs.BoolVar(&o.UseLocalPriceList, "use-local-price-list", env.WithDefaultBool("USE_LOCAL_PRICE_LIST", false), "if use-local-price-list is true, then it will use the embedded price list rather than to use the newest price list return from oci price api")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

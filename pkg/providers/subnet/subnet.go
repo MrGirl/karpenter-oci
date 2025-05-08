@@ -21,6 +21,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
 	"github.com/zoom/karpenter-oci/pkg/operator/options"
@@ -65,5 +66,32 @@ func (p *Provider) List(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (
 	}
 	// todo unique and sort
 	p.cache.SetDefault(fmt.Sprintf("%s:%d", nodeClass.Spec.VcnId, hash), subnets)
+	return subnets, nil
+}
+
+func (p *Provider) GetSubnetsByInstance(ctx context.Context, vnics []core.VnicAttachment) ([]core.Subnet, error) {
+
+	subnets := make([]core.Subnet, 0)
+	for _, vnic := range vnics {
+
+		// Create a request and dependent object(s).
+		req := core.GetSubnetRequest{
+			SubnetId: vnic.SubnetId,
+		}
+
+		// Send the request using the service client
+		resp, err := p.client.GetSubnet(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		subnets = append(subnets, resp.Subnet)
+	}
+
+	// uniq the subnets
+	subnets = lo.UniqBy(subnets, func(item core.Subnet) string {
+		return *item.Id
+	})
+
 	return subnets, nil
 }

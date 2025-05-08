@@ -34,6 +34,14 @@ const (
 	NVMeTerabytePerHour = "NVMe Terabyte Per Hour"
 )
 
+var specialTypeMap = map[string]string{
+	"GPU2":       "GPU Standard - X7",
+	"GPU3":       "GPU Standard - X7",
+	"Standard1":  "Standard - X5",
+	"Optimized3": "Standard - HPC - X7",
+	"HPC":        "Standard - HPC - X7",
+}
+
 type Item struct {
 	PartNumber      string `json:"partNumber"`
 	DisplayName     string `json:"displayName"`
@@ -146,6 +154,11 @@ type PriceCatalog struct {
 // FindPriceItems retrieves matching PriceItems for the given shape.
 func (catalog PriceCatalog) FindPriceItems(shape string) []Item {
 	parsedShape := ParseShape(shape)
+
+	// match special case
+	if v, ok := specialTypeMap[parsedShape.ServiceType]; ok {
+		parsedShape.ServiceType = v
+	}
 
 	candidates := findCandidate(catalog.Items, []string{parsedShape.ServiceCategory})
 
@@ -273,18 +286,30 @@ type PriceListSyncer struct {
 
 	SyncPeriod int64
 
+	UseLocalPriceList bool
+
 	PriceCatalog PriceCatalog
 }
 
-func NewPriceListSyncer(endpoint string, syncPeriod int64) *PriceListSyncer {
+func NewPriceListSyncer(endpoint string, syncPeriod int64, useLocalPriceList bool) *PriceListSyncer {
 
 	return &PriceListSyncer{
-		Endpoint:   endpoint,
-		SyncPeriod: syncPeriod,
+		Endpoint:          endpoint,
+		SyncPeriod:        syncPeriod,
+		UseLocalPriceList: useLocalPriceList,
 	}
 }
 
 func (syncer *PriceListSyncer) Start() error {
+
+	if syncer.UseLocalPriceList {
+
+		err := json.Unmarshal([]byte(defaultPrice), &syncer.PriceCatalog)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 
 	err := syncer.Get()
 	if err != nil {

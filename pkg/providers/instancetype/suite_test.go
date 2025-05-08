@@ -154,8 +154,9 @@ var _ = Describe("InstanceTypeProvider", func() {
 		}
 
 		// Ensure that we're exercising all well known labels
+		keys := lo.Keys(karpv1.NormalizedLabels)
 		Expect(lo.Keys(nodeSelector)).To(ContainElements(append(karpv1.WellKnownLabels.Difference(sets.New(
-			v1.LabelWindowsBuild)).UnsortedList(), lo.Keys(karpv1.NormalizedLabels)...)))
+			v1.LabelWindowsBuild)).UnsortedList(), keys...)))
 
 		var pods []*v1.Pod
 		for key, value := range nodeSelector {
@@ -223,7 +224,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 				nodeClass.Spec.Kubelet,
 				"us-ashburn-1",
 				[]string{"us-east-1"},
-				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+				ociEnv.InstanceTypesProvider.CreateOfferings(info.Shape, sets.New[string]("us-east-1")),
 			)
 			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 31))
 		}
@@ -259,7 +260,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 				nodeClass.Spec.Kubelet,
 				"us-ashburn-1",
 				[]string{"us-east-1"},
-				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+				ociEnv.InstanceTypesProvider.CreateOfferings(info.Shape, sets.New[string]("us-east-1")),
 			)
 			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", min(int64(customMaxPod), (info.CalMaxVnic-1)*31)))
 		}
@@ -342,7 +343,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("100m"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("100Mi"))
@@ -362,7 +363,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
@@ -379,7 +380,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("70m"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("1Gi"))
@@ -405,7 +406,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("10Gi"))
@@ -427,7 +428,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.EvictionThreshold.Memory().String()).To(Equal("100Mi"))
 			})
@@ -446,7 +447,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 10))
 			}
@@ -465,7 +466,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", info.CalcCpu))
 			}
@@ -485,7 +486,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings("shape-1", sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", lo.Min([]int64{20, info.CalcCpu * 4})))
 			}
@@ -606,8 +607,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			pod.Spec.Affinity = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
 				{
 					Weight: 1, Preference: v1.NodeSelectorTerm{MatchExpressions: []v1.NodeSelectorRequirement{
-					{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
-				}},
+						{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
+					}},
 				},
 			}}}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
@@ -771,8 +772,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			pod.Spec.Affinity = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
 				{
 					Weight: 1, Preference: v1.NodeSelectorTerm{MatchExpressions: []v1.NodeSelectorRequirement{
-					{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
-				}},
+						{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
+					}},
 				},
 			}}}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass)

@@ -96,8 +96,10 @@ func NewOperator(ctx context.Context, operator *operator_alt.Operator) (context.
 	options.ToContext(ctx, option)
 
 	// price list syncer
-	priceSyncer := pricing.NewPriceListSyncer(option.PriceEndpoint, option.SyncPeriod)
-	lo.Must0(priceSyncer.Start(), "failed to sync price list")
+	priceSyncer := pricing.NewPriceListSyncer(option.PriceEndpoint, option.PriceSyncPeriod, option.UseLocalPriceList)
+	if !option.UseLocalPriceList {
+		lo.Must0(priceSyncer.Start(), "failed to sync price list")
+	}
 
 	region := lo.Must(configProvider.Region())
 	cmpClient := lo.Must(core.NewComputeClientWithConfigurationProvider(configProvider))

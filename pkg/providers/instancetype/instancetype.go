@@ -80,6 +80,11 @@ func (p *Provider) List(ctx context.Context, kc *v1alpha1.KubeletConfiguration, 
 
 func (p *Provider) CreateOfferings(shape core.Shape, zones sets.Set[string]) []cloudprovider.Offering {
 	var offerings []cloudprovider.Offering
+
+	var priceCatalog *pricing.PriceCatalog
+	if p.priceSyncer != nil {
+		priceCatalog = &p.priceSyncer.PriceCatalog
+	}
 	// only on-demand support
 	for zone := range zones {
 		// exclude any offerings that have recently seen an insufficient capacity error
@@ -89,7 +94,7 @@ func (p *Provider) CreateOfferings(shape core.Shape, zones sets.Set[string]) []c
 				scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
 				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
 			),
-			Price:     float64(pricing.Calculate(shape, p.priceSyncer.PriceCatalog)),
+			Price:     float64(pricing.Calculate(shape, priceCatalog)),
 			Available: !isUnavailable,
 		})
 		// metric
