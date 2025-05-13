@@ -53,7 +53,6 @@ func (p *Provider) List(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (
 	if err != nil {
 		return nil, err
 	}
-	// todo match vnc id
 	p.cache.SetDefault(nodeClass.Spec.VcnId+":"+nodeClass.Spec.SubnetName, resp.Items)
 	return resp.Items, nil
 }

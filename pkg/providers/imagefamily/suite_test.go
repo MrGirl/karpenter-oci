@@ -81,7 +81,7 @@ var _ = Describe("AMIProvider", func() {
 		Expect(amis).To(HaveLen(1))
 	})
 	It("should succeed to resolve AMIs (Ubuntu)", func() {
-		nodeClass.Spec.ImageFamily = v1alpha1.OracleLinuxImageFamily
+		nodeClass.Spec.ImageFamily = v1alpha1.OracleOKELinuxImageFamily
 		amis, err := ociEnv.AMIProvider.List(ctx, nodeClass)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(amis).To(HaveLen(1))

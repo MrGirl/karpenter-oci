@@ -104,7 +104,6 @@ var _ = Describe("LaunchTemplate Provider", func() {
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					ObjectMeta: karpv1.ObjectMeta{
-						// TODO @joinnis: Move this into the coretest.NodePool function
 						Labels: map[string]string{coretest.DiscoveryLabel: "unspecified"},
 					},
 					Spec: karpv1.NodeClaimTemplateSpec{

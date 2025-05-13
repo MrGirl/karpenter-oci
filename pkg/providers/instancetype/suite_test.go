@@ -485,7 +485,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 
 			for _, tc := range []struct {
 				InstanceType string
-				// todo this need to verified in actual oci cluster
+				// this need to verified in actual oci cluster
 				// Actual allocatable values as reported by the node from kubelet. You find these
 				// by launching the node and inspecting the node status allocatable.
 				Memory resource.Quantity

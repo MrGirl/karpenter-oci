@@ -171,7 +171,6 @@ func NewOperator() (context.Context, *Operator) {
 		},
 	}
 	if options.FromContext(ctx).EnableProfiling {
-		// TODO @joinnis: Investigate the mgrOpts.PprofBindAddress that would allow native support for pprof
 		// On initial look, it seems like this native pprof doesn't support some of the routes that we have here
 		// like "/debug/pprof/heap" or "/debug/pprof/block"
 		mgrOpts.Metrics.ExtraHandlers = lo.Assign(mgrOpts.Metrics.ExtraHandlers, map[string]http.Handler{

@@ -20,24 +20,16 @@ import (
 	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
 )
 
-type OracleOKELinux struct {
+type Custom struct {
 	DefaultFamily
 	*Options
 }
 
-func (a OracleOKELinux) UserData(kubeletConfig *v1alpha1.KubeletConfiguration, taints []v1.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper {
-	return bootstrap.OKE{
+// UserData returns the default userdata script for the AMI Family
+func (c Custom) UserData(_ *v1alpha1.KubeletConfiguration, _ []v1.Taint, _ map[string]string, customUserData *string, _ *string) bootstrap.Bootstrapper {
+	return bootstrap.Custom{
 		Options: bootstrap.Options{
-			ClusterName:      a.Options.ClusterName,
-			ClusterEndpoint:  a.Options.ClusterEndpoint,
-			ClusterDns:       a.Options.ClusterDns,
-			CABundle:         a.Options.CABundle,
-			BootstrapToken:   a.Options.BootstrapToken,
-			KubeletConfig:    kubeletConfig,
-			Taints:           taints,
-			Labels:           labels,
-			CustomUserData:   customUserData,
-			PreInstallScript: preInstallScript,
+			CustomUserData: customUserData,
 		},
 	}
 }
