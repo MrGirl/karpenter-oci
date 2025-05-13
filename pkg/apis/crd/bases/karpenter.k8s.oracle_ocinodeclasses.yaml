@@ -39,6 +39,10 @@ spec:
               type: object
             spec:
               properties:
+                agentList:
+                  items:
+                    type: string
+                  type: array
                 blockDevices:
                   items:
                     properties:

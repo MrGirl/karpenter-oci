@@ -49,6 +49,7 @@ type OciNodeClassSpec struct {
 	BootConfig    *BootConfig           `json:"bootConfig"`
 	LaunchOptions *LaunchOptions        `json:"launchOptions,omitempty"`
 	BlockDevices  []*VolumeAttributes   `json:"blockDevices,omitempty"`
+	AgentList     []string              `json:"agentList,omitempty"`
 }
 
 type VolumeAttributes struct {

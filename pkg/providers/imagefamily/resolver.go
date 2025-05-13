@@ -94,10 +94,12 @@ func GetImageFamily(imageFamily string, options *Options) ImageFamily {
 	switch imageFamily {
 	case v1alpha1.Ubuntu2204ImageFamily:
 		return &UbuntuLinux{Options: options}
-	case v1alpha1.OracleLinuxImageFamily:
-		return &OracleLinux{Options: options}
+	case v1alpha1.OracleOKELinuxImageFamily:
+		return &OracleOKELinux{Options: options}
+	case v1alpha1.CustomImageFamily:
+		return &Custom{Options: options}
 	default:
-		return &OracleLinux{Options: options}
+		return &OracleOKELinux{Options: options}
 	}
 }
 

@@ -123,22 +123,22 @@ spec:
 ### ocinodeclass
 the ocinodeclass is used for config the oracle cloud related resource, like OS image, subnet, security group, and also kubelet config.
 
-| spec                           | description                                                                                                         | required | example                                                                                                              |
-|--------------------------------|---------------------------------------------------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------|
-| bootConfig.bootVolumeSizeInGBs | The size of the boot volume in GBs. Minimum value is 50 GB and maximum value is 32,768 GB (32 TB).                  | yes      | 100                                                                                                                  |
-| bootConfig.bootVolumeVpusPerGB | The number of volume performance units (VPUs) that will be applied to this volume per GB                            | yes      | 10                                                                                                                   |
-| image.compartmentId            | the compartment id of the image                                                                                     | yes      | ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq                                  |
-| image.name                     | the image name                                                                                                      | yes      | Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760                                                                        |
-| launchOptions                  | LaunchOptions Options for tuning the compatibility and performance of VM shapes                                     | no       | [detail](https://docs.oracle.com/en-us/iaas/tools/python/2.150.3/api/core/models/oci.core.models.LaunchOptions.html) |
-| blockDevices                   | The details of the volume to create for CreateVolume operation.                                                     | no       | `sizeInGBs: 100` `vpusPerGB: 10`                                                                                     |
-| imageFamily                    | support OracleLinux and Ubuntu2204, for OKE cluster use `OracleLinux` and for self-managed cluster use `Ubuntu2204` | yes      | OracleLinux                                                                                                          |
-| vcnId                          | the vcnId of the cluster                                                                                            | yes      |                                                                                                                      |
-| subnetName                     | the name of the subnet which you want to create the worker nodes instance in                                        | yes      | oke-nodesubnet-quick-test                                                                                            |
-| securityGroupNames             | the security groups you want to attach to the instance                                                              | no       |                                                                                                                      |
-| tags                           | the tags you want to attach to the instance                                                                         | no       |                                                                                                                      |
-| metaData                       | specify for native cni cluster                                                                                      | no       | `{"oke-native-pod-networking":"true"}`                                                                               |
-| userData                       | customer userdata you want to run in the cloud-init script, it will execute before the kubelet start                | no       |                                                                                                                      |
-| kubelet                        | customer kubelet config                                                                                             | no       | [KubeletConfiguration](pkg/apis/v1alpha1/ocinodeclass.go)                                                            |
+| spec                           | description                                                                                                                | required | example                                                                                                              |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------|
+| bootConfig.bootVolumeSizeInGBs | The size of the boot volume in GBs. Minimum value is 50 GB and maximum value is 32,768 GB (32 TB).                         | yes      | 100                                                                                                                  |
+| bootConfig.bootVolumeVpusPerGB | The number of volume performance units (VPUs) that will be applied to this volume per GB                                   | yes      | 10                                                                                                                   |
+| image.compartmentId            | the compartment id of the image                                                                                            | yes      | ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq                                  |
+| image.name                     | the image name                                                                                                             | yes      | Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760                                                                        |
+| launchOptions                  | LaunchOptions Options for tuning the compatibility and performance of VM shapes                                            | no       | [detail](https://docs.oracle.com/en-us/iaas/tools/python/2.150.3/api/core/models/oci.core.models.LaunchOptions.html) |
+| blockDevices                   | The details of the volume to create for CreateVolume operation.                                                            | no       | `sizeInGBs: 100` `vpusPerGB: 10`                                                                                     |
+| imageFamily                    | support OracleOKELinux and Ubuntu2204, for OKE cluster use `OracleOKELinux` and for self-managed cluster use `Ubuntu2204`  | yes      | OracleOKELinux                                                                                                       |
+| vcnId                          | the vcnId of the cluster                                                                                                   | yes      |                                                                                                                      |
+| subnetName                     | the name of the subnet which you want to create the worker nodes instance in                                               | yes      | oke-nodesubnet-quick-test                                                                                            |
+| securityGroupNames             | the security groups you want to attach to the instance                                                                     | no       |                                                                                                                      |
+| tags                           | the tags you want to attach to the instance                                                                                | no       |                                                                                                                      |
+| metaData                       | specify for native cni cluster                                                                                             | no       | `{"oke-native-pod-networking":"true"}`                                                                               |
+| userData                       | customer userdata you want to run in the cloud-init script, it will execute before the kubelet start                       | no       |                                                                                                                      |
+| kubelet                        | customer kubelet config                                                                                                    | no       | [KubeletConfiguration](pkg/apis/v1alpha1/ocinodeclass.go)                                                            |
 
 - if your cluster use flannel as the cni, you can refer:
 [example](pkg/apis/crd/sample/oke_ocinodeclasses_sample.yaml)
@@ -154,7 +154,7 @@ spec:
   image:
     compartmentId: ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq
     name: Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760
-  imageFamily: OracleLinux
+  imageFamily: OracleOKELinux
   kubelet:
     evictionHard:
       imagefs.available: 15%
@@ -180,7 +180,7 @@ spec:
   image:
     compartmentId: ocid1.compartment.oc1..aaaaaaaab4u67dhgtj5gpdpp3z42xqqsdnufxkatoild46u3hb67vzojfmzq
     name: Oracle-Linux-8.10-2025.02.28-0-OKE-1.30.1-760
-  imageFamily: OracleLinux
+  imageFamily: OracleOKELinux
   metaData:
     oke-native-pod-networking: "true"
   kubelet:

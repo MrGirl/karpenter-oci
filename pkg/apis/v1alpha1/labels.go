@@ -59,6 +59,7 @@ var (
 )
 
 const (
-	Ubuntu2204ImageFamily  = "Ubuntu2204"
-	OracleLinuxImageFamily = "OracleLinux"
+	Ubuntu2204ImageFamily     = "Ubuntu2204"
+	OracleOKELinuxImageFamily = "OracleOKELinux"
+	CustomImageFamily         = "Custom"
 )

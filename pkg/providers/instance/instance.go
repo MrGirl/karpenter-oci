@@ -121,11 +121,8 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 		AvailabilityDomain: common.String(ad),
 		Shape:              common.String(instanceType.Name),
 		Metadata:           metadata,
-		// use for debug agent
-		AgentConfig: &core.LaunchInstanceAgentConfigDetails{
-			PluginsConfig: []core.InstanceAgentPluginConfigDetails{{Name: common.String("Bastion"), DesiredState: core.InstanceAgentPluginConfigDetailsDesiredStateEnabled}},
-		},
 	}}
+
 	// for flexible instance, specify the ocpu and memory
 	if instanceType.Requirements.Get(v1alpha1.LabelIsFlexible).Has("true") {
 		vcpuVal := instanceType.Requirements.Get(v1alpha1.LabelInstanceCPU).Values()
@@ -146,11 +143,16 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 			return nil, err
 		}
 	}
-
+	if len(nodeClass.Spec.AgentList) != 0 {
+		req.AgentConfig = &core.LaunchInstanceAgentConfigDetails{
+			PluginsConfig: lo.Map(nodeClass.Spec.AgentList, func(item string, index int) core.InstanceAgentPluginConfigDetails {
+				return core.InstanceAgentPluginConfigDetails{Name: common.String(item), DesiredState: core.InstanceAgentPluginConfigDetailsDesiredStateEnabled}
+			}),
+		}
+	}
 	// Send the request using the service client
 	resp, err := p.compClient.LaunchInstance(ctx, req)
 	if err != nil {
-		// todo deal insufficient error
 		p.updateUnavailableOfferingsCache(ctx, err, instanceType.Name, zone)
 		return nil, err
 	}
