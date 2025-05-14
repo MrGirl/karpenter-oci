@@ -18,8 +18,8 @@ import (
 	"context"
 	"flag"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/test"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/test"
 	"os"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"testing"
@@ -58,7 +58,6 @@ var _ = Describe("Options", func() {
 			"--cluster-endpoint", "https://env-cluster",
 			"--cluster-ca-bundle", "env-bundle",
 			"--cluster-bootstrap-token", "env-token",
-			"--ssh-key", "env-ssh",
 			"--compartment-id", "ocid1.compartment.oc1..aaaaaaaa",
 			"--vm-memory-overhead-percent", "0.075",
 			"--flex-cpu-mem-ratios", "2,4",
@@ -69,7 +68,6 @@ var _ = Describe("Options", func() {
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			ClusterCABundle:         lo.ToPtr("env-bundle"),
 			BootStrapToken:          lo.ToPtr("env-token"),
-			SshKey:                  lo.ToPtr("env-ssh"),
 			CompartmentId:           lo.ToPtr("ocid1.compartment.oc1..aaaaaaaa"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.075),
 			FlexCpuMemRatios:        lo.ToPtr("2,4"),
@@ -77,16 +75,15 @@ var _ = Describe("Options", func() {
 		}))
 	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
-		os.Setenv("CLUSTER_NAME", "env-cluster")
-		os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
-		os.Setenv("CLUSTER_CA_BUNDLE", "env-bundle")
-		os.Setenv("CLUSTER_BOOTSTRAP_TOKEN", "env-token")
-		os.Setenv("SSH_KEY", "env-ssh")
-		os.Setenv("COMPARTMENT_ID", "ocid1.compartment.oc1..aaaaaaaa")
-		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.075")
-		os.Setenv("FLEX_CPU_MEM_RATIOS", "2,4")
-		os.Setenv("FLEX_CPU_CONSTRAIN_LIST", "2,4,8")
-		os.Setenv("AVAILABLE_DOMAIN_PREFIX", "env-prefix")
+		_ = os.Setenv("CLUSTER_NAME", "env-cluster")
+		_ = os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
+		_ = os.Setenv("CLUSTER_CA_BUNDLE", "env-bundle")
+		_ = os.Setenv("CLUSTER_BOOTSTRAP_TOKEN", "env-token")
+		_ = os.Setenv("COMPARTMENT_ID", "ocid1.compartment.oc1..aaaaaaaa")
+		_ = os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.075")
+		_ = os.Setenv("FLEX_CPU_MEM_RATIOS", "2,4")
+		_ = os.Setenv("FLEX_CPU_CONSTRAIN_LIST", "2,4,8")
+		_ = os.Setenv("AVAILABLE_DOMAIN_PREFIX", "env-prefix")
 
 		// Add flags after we set the environment variables so that the parsing logic correctly refers
 		// to the new environment variable values
@@ -98,7 +95,6 @@ var _ = Describe("Options", func() {
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			ClusterCABundle:         lo.ToPtr("env-bundle"),
 			BootStrapToken:          lo.ToPtr("env-token"),
-			SshKey:                  lo.ToPtr("env-ssh"),
 			CompartmentId:           lo.ToPtr("ocid1.compartment.oc1..aaaaaaaa"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.075),
 			FlexCpuMemRatios:        lo.ToPtr("2,4"),
@@ -115,7 +111,7 @@ var _ = Describe("Options", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should fail when clusterEndpoint is invalid (not absolute)", func() {
-			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--cluster-endpoint", "00000000000000000000000.gr7.us-west-2.eks.amazonaws.com")
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--cluster-endpoint", "00000000000000000000000.oracle.com")
 			Expect(err).To(HaveOccurred())
 		})
 		It("should fail when vmMemoryOverheadPercent is negative", func() {
@@ -131,7 +127,6 @@ func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
 	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))
 	Expect(optsA.ClusterCABundle).To(Equal(optsB.ClusterCABundle))
 	Expect(optsA.BootStrapToken).To(Equal(optsB.BootStrapToken))
-	Expect(optsA.SshKey).To(Equal(optsB.SshKey))
 	Expect(optsA.CompartmentId).To(Equal(optsB.CompartmentId))
 	Expect(optsA.VMMemoryOverheadPercent).To(Equal(optsB.VMMemoryOverheadPercent))
 	Expect(optsA.FlexCpuMemRatios).To(Equal(optsB.FlexCpuMemRatios))

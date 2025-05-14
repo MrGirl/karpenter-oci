@@ -16,9 +16,9 @@ package launchtemplate
 
 import (
 	"context"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/providers/imagefamily"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )

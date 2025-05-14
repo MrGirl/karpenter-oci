@@ -22,8 +22,8 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/operator/oci/api"
-	"karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
+	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
 	"net/http"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
@@ -59,15 +59,15 @@ type CmpBehavior struct {
 var defaultDescribeInstanceTypesOutput = core.ListShapesResponse{
 	Items: []core.Shape{
 		{Shape: common.String("shape-1"), IsFlexible: common.Bool(false), Ocpus: common.Float32(1), MemoryInGBs: common.Float32(4),
-			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)},
 		{Shape: common.String("shape-2"), IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
-			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)},
 		{Shape: common.String("shape-3"), IsFlexible: common.Bool(false), Ocpus: common.Float32(4), MemoryInGBs: common.Float32(16),
-			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)},
 		{Shape: common.String("shape-4"), IsFlexible: common.Bool(false), Ocpus: common.Float32(8), MemoryInGBs: common.Float32(32),
-			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)},
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)},
 		{Shape: common.String("shape-gpu"), IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
-			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1), Gpus: common.Int(1), GpuDescription: common.String("A100")},
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2), Gpus: common.Int(1), GpuDescription: common.String("A100")},
 	},
 }
 

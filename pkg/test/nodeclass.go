@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 
 	"github.com/imdario/mergo"

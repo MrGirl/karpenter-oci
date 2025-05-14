@@ -16,10 +16,10 @@ package status
 
 import (
 	"context"
-	"karpenter-oci/pkg/apis"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/operator/options"
-	test "karpenter-oci/pkg/test"
+	"github.com/zoom/karpenter-oci/pkg/apis"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	test "github.com/zoom/karpenter-oci/pkg/test"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	coretestv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"

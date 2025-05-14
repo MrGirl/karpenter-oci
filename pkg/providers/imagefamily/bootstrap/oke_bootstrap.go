@@ -96,7 +96,7 @@ func (e OKE) mergeCustomUserData(userDatas ...string) (string, error) {
 			return "", err
 		}
 	}
-	writer.Close()
+	defer func() { _ = writer.Close() }()
 	return outputBuffer.String(), nil
 }
 
@@ -121,7 +121,7 @@ func (e OKE) mimeify(customUserData string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("writing custom user-data input: %w", err)
 	}
-	writer.Close()
+	defer func() { _ = writer.Close() }()
 	return outputBuffer.String(), nil
 }
 

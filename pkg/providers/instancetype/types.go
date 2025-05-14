@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/utils"
 	"knative.dev/pkg/ptr"
 	"math"
 	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -158,7 +158,7 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 		// Well Known to OCI
 		scheduling.NewRequirement(v1alpha1.LabelInstanceShapeName, v1.NodeSelectorOpIn, *shape.Shape.Shape),
 		scheduling.NewRequirement(v1alpha1.LabelInstanceCPU, v1.NodeSelectorOpIn, fmt.Sprint(shape.CalcCpu)),
-		scheduling.NewRequirement(v1alpha1.LabelIsFlexible, v1.NodeSelectorOpIn, fmt.Sprint(lo.FromPtr(shape.Shape.IsFlexible))),
+		scheduling.NewRequirement(v1alpha1.LabelIsFlexible, v1.NodeSelectorOpIn, fmt.Sprint(lo.FromPtr(shape.IsFlexible))),
 		scheduling.NewRequirement(v1alpha1.LabelInstanceGPU, v1.NodeSelectorOpDoesNotExist),
 		scheduling.NewRequirement(v1alpha1.LabelInstanceGPUDescription, v1.NodeSelectorOpDoesNotExist),
 		scheduling.NewRequirement(v1alpha1.LabelInstanceMemory, v1.NodeSelectorOpIn, fmt.Sprint(shape.CalMemInGBs*1024)),
@@ -172,9 +172,9 @@ func computeRequirements(ctx context.Context, shape *WrapShape, offerings cloudp
 	if shape.MaxVnicAttachments != nil {
 		requirements[v1alpha1.LabelInstanceMaxVNICs].Insert(fmt.Sprint(shape.CalMaxVnic))
 	}
-	if shape.Shape.Gpus != nil && lo.FromPtr(shape.Shape.Gpus) != 0 {
+	if shape.Gpus != nil && lo.FromPtr(shape.Gpus) != 0 {
 		requirements[v1alpha1.LabelInstanceGPU].Insert(fmt.Sprint(nvidiaGPUs(shape.Shape).Value()))
-		qualifiedDesc := utils.SanitizeLabelValue(lo.FromPtr(shape.Shape.GpuDescription))
+		qualifiedDesc := utils.SanitizeLabelValue(lo.FromPtr(shape.GpuDescription))
 		requirements[v1alpha1.LabelInstanceGPUDescription].Insert(qualifiedDesc)
 	}
 

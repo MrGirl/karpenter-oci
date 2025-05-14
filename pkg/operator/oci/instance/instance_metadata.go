@@ -76,7 +76,7 @@ func (m *metadataGetter) executeRequest(req *http.Request) (*InstanceMetadata, e
 	zap.S().Infof("Metadata endpoint %s returned response successfully", req.URL.Path)
 
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			return nil, errors.Errorf("metadata endpoint v2 returned status %d; expected 200 OK", resp.StatusCode)
 		}

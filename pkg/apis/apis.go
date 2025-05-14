@@ -18,9 +18,9 @@ package apis
 import (
 	_ "embed"
 	"github.com/awslabs/operatorpkg/object"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"karpenter-oci/pkg/apis/v1alpha1"
 
 	"sigs.k8s.io/karpenter/pkg/apis"
 )
@@ -36,7 +36,7 @@ var (
 
 //go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
 var (
-	//go:embed crd/bases/karpenter.k8s.oracle_ocinodeclasses.yaml
+	//go:embed crds/karpenter.k8s.oracle_ocinodeclasses.yaml
 	OciNodeClassCRD []byte
 	CRDs            = append(apis.CRDs,
 		object.Unmarshal[v1.CustomResourceDefinition](OciNodeClassCRD),

@@ -18,10 +18,10 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/common/auth"
 	"github.com/pkg/errors"
+	metadata "github.com/zoom/karpenter-oci/pkg/operator/oci/instance"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 	"io"
-	metadata "karpenter-oci/pkg/operator/oci/instance"
 	"os"
 )
 
@@ -114,7 +114,7 @@ func NewConfigurationProvider(cfg *Config) (common.ConfigurationProvider, error)
 // FromFile will load a cloud provider configuration file from a given file path.
 func FromFile(path string) (*Config, error) {
 	f, err := os.Open(path)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err != nil {
 		return nil, err

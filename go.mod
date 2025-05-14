@@ -1,4 +1,4 @@
-module karpenter-oci
+module github.com/zoom/karpenter-oci
 
 go 1.23.6
 

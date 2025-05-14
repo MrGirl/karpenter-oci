@@ -20,7 +20,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/operator/oci/api"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
 )
 
 var _ api.VirtualNetworkClient = &VcnCli{}

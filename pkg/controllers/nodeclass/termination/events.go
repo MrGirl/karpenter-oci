@@ -16,8 +16,8 @@ package termination
 
 import (
 	"fmt"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/utils"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 

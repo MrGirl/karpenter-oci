@@ -20,15 +20,15 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/cache"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/launchtemplate"
+	"github.com/zoom/karpenter-oci/pkg/providers/securitygroup"
+	"github.com/zoom/karpenter-oci/pkg/providers/subnet"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	v1 "k8s.io/api/core/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/cache"
-	"karpenter-oci/pkg/operator/oci/api"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/providers/launchtemplate"
-	"karpenter-oci/pkg/providers/securitygroup"
-	"karpenter-oci/pkg/providers/subnet"
-	"karpenter-oci/pkg/utils"
 	"net/http"
 	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
@@ -117,10 +117,11 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 			BootVolumeSizeInGBs: common.Int64(nodeClass.Spec.BootConfig.BootVolumeSizeInGBs)},
 		DefinedTags:        map[string]map[string]interface{}{options.FromContext(ctx).TagNamespace: getTags(ctx, nodeClass, nodeClaim)},
 		CompartmentId:      common.String(options.FromContext(ctx).CompartmentId),
-		DisplayName:        common.String(nodeClaim.ObjectMeta.Name),
+		DisplayName:        common.String(nodeClaim.Name),
 		AvailabilityDomain: common.String(ad),
 		Shape:              common.String(instanceType.Name),
 		Metadata:           metadata,
+		InstanceOptions:    &core.InstanceOptions{AreLegacyImdsEndpointsDisabled: common.Bool(true)},
 	}}
 
 	// for flexible instance, specify the ocpu and memory
@@ -128,17 +129,17 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 		vcpuVal := instanceType.Requirements.Get(v1alpha1.LabelInstanceCPU).Values()
 		memoryInMiVal := instanceType.Requirements.Get(v1alpha1.LabelInstanceMemory).Values()
 		if len(vcpuVal) == 0 || len(memoryInMiVal) == 0 {
-			return nil, fmt.Errorf("failed to calculate cpu and memory for flex instance when creating instance, nodecliam: %s", nodeClaim.ObjectMeta.Name)
+			return nil, fmt.Errorf("failed to calculate cpu and memory for flex instance when creating instance, nodecliam: %s", nodeClaim.Name)
 		}
 		vcpu, _ := strconv.Atoi(vcpuVal[0])
 		memoryInMi, _ := strconv.Atoi(memoryInMiVal[0])
-		req.LaunchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
+		req.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
 			MemoryInGBs: common.Float32(float32(memoryInMi / 1024)),
 			Ocpus:       common.Float32(float32(vcpu / 2.0))}
 	}
 	if nodeClass.Spec.LaunchOptions != nil {
 		launchOpts, err := utils.ConvertLaunchOptions(nodeClass.Spec.LaunchOptions)
-		req.LaunchInstanceDetails.LaunchOptions = launchOpts
+		req.LaunchOptions = launchOpts
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +232,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*core.Instance, error) {
 	if out.RawResponse != nil && out.RawResponse.StatusCode == http.StatusNotFound {
 		return nil, corecloudprovider.NewNodeClaimNotFoundError(err)
 	}
-	if out.Instance.LifecycleState == core.InstanceLifecycleStateTerminated {
+	if out.LifecycleState == core.InstanceLifecycleStateTerminated {
 		return nil, corecloudprovider.NewNodeClaimNotFoundError(err)
 	}
 	return &out.Instance, nil

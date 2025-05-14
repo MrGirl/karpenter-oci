@@ -24,18 +24,18 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/cloudprovider"
+	"github.com/zoom/karpenter-oci/pkg/fake"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/test"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
-	"karpenter-oci/pkg/apis"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/cloudprovider"
-	"karpenter-oci/pkg/fake"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/providers/instancetype"
-	"karpenter-oci/pkg/test"
 	"knative.dev/pkg/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
@@ -147,7 +147,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			v1alpha1.LabelInstanceCPU:              "2",
 			v1alpha1.LabelInstanceMemory:           "8192",
 			v1alpha1.LabelInstanceNetworkBandwidth: "10",
-			v1alpha1.LabelInstanceMaxVNICs:         "1",
+			v1alpha1.LabelInstanceMaxVNICs:         "2",
 			v1alpha1.LabelIsFlexible:               "false",
 			v1alpha1.LabelInstanceGPU:              "1",
 			v1alpha1.LabelInstanceGPUDescription:   "A100",
@@ -213,7 +213,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
 		ExpectNotScheduled(ctx, env.Client, pod)
 	})
-	It("should not set pods to 110", func() {
+	It("calculate max-pods by max MaxVnicAttachments", func() {
 		instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
 		Expect(err).To(BeNil())
 		for _, info := range instanceInfo {
@@ -225,7 +225,43 @@ var _ = Describe("InstanceTypeProvider", func() {
 				[]string{"us-east-1"},
 				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
 			)
-			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 110))
+			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 31))
+		}
+	})
+	It("calculate max-pods by max MaxVnicAttachments for flex instance type", func() {
+		ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("VM.Standard.E4.Flex"),
+			IsFlexible: common.Bool(true), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
+			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2),
+			MaxVnicAttachmentOptions: &core.ShapeMaxVnicAttachmentOptions{
+				Min:            common.Int(2),
+				Max:            common.Float32(24),
+				DefaultPerOcpu: common.Float32(1),
+			},
+			OcpuOptions: &core.ShapeOcpuOptions{
+				Min: common.Float32(1),
+				Max: common.Float32(16),
+			},
+			MemoryOptions: &core.ShapeMemoryOptions{
+				MinInGBs: common.Float32(2),
+				MaxInGBs: common.Float32(4096),
+			},
+		}})
+		customMaxPod := int32(100)
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
+			MaxPods: &customMaxPod,
+		}
+		instanceInfo, err := ociEnv.InstanceTypesProvider.ListInstanceType(ctx)
+		Expect(err).To(BeNil())
+		for _, info := range instanceInfo {
+			it := instancetype.NewInstanceType(ctx,
+				info,
+				nodeClass,
+				nodeClass.Spec.Kubelet,
+				"us-ashburn-1",
+				[]string{"us-east-1"},
+				ociEnv.InstanceTypesProvider.CreateOfferings(lo.FromPtr(info.Shape.Shape), sets.New[string]("us-east-1"), info.CalcCpu, info.CalMemInGBs),
+			)
+			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", min(int64(customMaxPod), (info.CalMaxVnic-1)*31)))
 		}
 	})
 	Context("Metrics", func() {
@@ -460,16 +496,16 @@ var _ = Describe("InstanceTypeProvider", func() {
 			ociEnv.Reset()
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.small"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(1), MemoryInGBs: common.Float32(4),
-				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.medium"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
-				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.xlarge"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(4), MemoryInGBs: common.Float32(16),
-				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("m5.large"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
-				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 
 			nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
 				EvictionHard: map[string]string{"memory.available": "750Mi"},
@@ -570,8 +606,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			pod.Spec.Affinity = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
 				{
 					Weight: 1, Preference: v1.NodeSelectorTerm{MatchExpressions: []v1.NodeSelectorRequirement{
-						{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
-					}},
+					{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
+				}},
 				},
 			}}}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
@@ -725,7 +761,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					MinInGBs: common.Float32(2),
 					MaxInGBs: common.Float32(128),
 				},
-				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(1)}})
+				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 			pod := coretest.UnschedulablePod(coretest.PodOptions{
 				NodeSelector: map[string]string{v1.LabelInstanceTypeStable: "flex_instance"},
 				ResourceRequirements: v1.ResourceRequirements{
@@ -735,8 +771,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			pod.Spec.Affinity = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
 				{
 					Weight: 1, Preference: v1.NodeSelectorTerm{MatchExpressions: []v1.NodeSelectorRequirement{
-						{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
-					}},
+					{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"US-ASHBURN-AD-1"}},
+				}},
 				},
 			}}}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
