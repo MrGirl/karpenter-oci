@@ -25,28 +25,27 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	operator_alt "github.com/zoom/karpenter-oci/pkg/alt/karpenter-core/pkg/operator"
+	ocicache "github.com/zoom/karpenter-oci/pkg/cache"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/config"
+	metadata "github.com/zoom/karpenter-oci/pkg/operator/oci/instance"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily"
+	"github.com/zoom/karpenter-oci/pkg/providers/instance"
+	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/providers/launchtemplate"
+	"github.com/zoom/karpenter-oci/pkg/providers/securitygroup"
+	"github.com/zoom/karpenter-oci/pkg/providers/subnet"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	"go.uber.org/zap"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
-	operator_alt "karpenter-oci/pkg/alt/karpenter-core/pkg/operator"
-	ocicache "karpenter-oci/pkg/cache"
-	"karpenter-oci/pkg/operator/oci/config"
-	metadata "karpenter-oci/pkg/operator/oci/instance"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/providers/imagefamily"
-	"karpenter-oci/pkg/providers/instance"
-	"karpenter-oci/pkg/providers/instancetype"
-	"karpenter-oci/pkg/providers/launchtemplate"
-	"karpenter-oci/pkg/providers/securitygroup"
-	"karpenter-oci/pkg/providers/subnet"
-	"karpenter-oci/pkg/utils"
 	"knative.dev/pkg/ptr"
 	"os"
 	"os/user"
 )
 
 const (
-	ociAuthMethodsEnv       = "OCI_AUTH_METHODS"
 	authByApiKey            = "API_KEY"
 	authByOke               = "OKE"
 	authBySession           = "SESSION"
@@ -70,16 +69,19 @@ type Operator struct {
 
 func NewOperator(ctx context.Context, operator *operator_alt.Operator) (context.Context, *Operator) {
 	var configProvider common.ConfigurationProvider
-	authMethod, ok := os.LookupEnv(ociAuthMethodsEnv)
-	if !ok || authMethod == authByApiKey {
+	authMethod := options.FromContext(ctx).OciAuthMethods
+	switch authMethod {
+	case authByApiKey:
 		configProvider = lo.Must(NewOCIProvisioner())
-	} else if authMethod == authByOke {
-		configProvider = lo.Must(auth.OkeWorkloadIdentityConfigurationProvider())
-	} else if authMethod == authBySession {
+	case authBySession:
 		user := lo.Must(user.Current())
 		configProvider = common.CustomProfileSessionTokenConfigProvider(fmt.Sprintf("%s/.oci/config", user.HomeDir), "SESSION")
-	} else if authMethod == authByInstancePrincipal {
+	case authByInstancePrincipal:
 		configProvider = lo.Must(auth.InstancePrincipalConfigurationProvider())
+	case authByOke:
+		configProvider = lo.Must(auth.OkeWorkloadIdentityConfigurationProvider())
+	default:
+		configProvider = lo.Must(auth.OkeWorkloadIdentityConfigurationProvider())
 	}
 
 	// inject available domain

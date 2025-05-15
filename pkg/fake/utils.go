@@ -17,8 +17,8 @@ package fake
 import (
 	"fmt"
 	"github.com/Pallinder/go-randomdata"
+	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"karpenter-oci/pkg/providers/instancetype"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 

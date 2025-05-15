@@ -18,10 +18,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily/bootstrap"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	core "k8s.io/api/core/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
-	"karpenter-oci/pkg/utils"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )

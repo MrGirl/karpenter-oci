@@ -16,11 +16,11 @@ package main
 
 import (
 	"github.com/samber/lo"
-	operator_alt "karpenter-oci/pkg/alt/karpenter-core/pkg/operator"
-	"karpenter-oci/pkg/controllers"
+	operator_alt "github.com/zoom/karpenter-oci/pkg/alt/karpenter-core/pkg/operator"
+	"github.com/zoom/karpenter-oci/pkg/controllers"
 
-	"karpenter-oci/pkg/cloudprovider"
-	"karpenter-oci/pkg/operator"
+	"github.com/zoom/karpenter-oci/pkg/cloudprovider"
+	"github.com/zoom/karpenter-oci/pkg/operator"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	corewebhooks "sigs.k8s.io/karpenter/pkg/webhooks"

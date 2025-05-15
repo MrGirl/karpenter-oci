@@ -17,8 +17,8 @@ package status
 import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	oci_core "github.com/oracle/oci-go-sdk/v65/core"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	test "karpenter-oci/pkg/test"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	test "github.com/zoom/karpenter-oci/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

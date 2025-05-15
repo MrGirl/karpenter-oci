@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"github.com/imdario/mergo"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
 )
 
 type OptionsFields struct {
@@ -26,7 +26,6 @@ type OptionsFields struct {
 	ClusterEndpoint         *string
 	ClusterCABundle         *string
 	BootStrapToken          *string
-	SshKey                  *string
 	CompartmentId           *string
 	VMMemoryOverheadPercent *float64
 	FlexCpuMemRatios        *string
@@ -47,7 +46,6 @@ func Options(overrides ...OptionsFields) *options.Options {
 		ClusterName:             lo.FromPtrOr(opts.ClusterName, "test-cluster"),
 		ClusterEndpoint:         lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
 		BootStrapToken:          lo.FromPtrOr(opts.BootStrapToken, "fake_token"),
-		SshKey:                  lo.FromPtrOr(opts.SshKey, "fake_token"),
 		CompartmentId:           lo.FromPtrOr(opts.CompartmentId, "fake_compartment_id"),
 		VMMemoryOverheadPercent: lo.FromPtrOr(opts.VMMemoryOverheadPercent, 0.075),
 		FlexCpuMemRatios:        lo.FromPtrOr(opts.FlexCpuMemRatios, "4"),

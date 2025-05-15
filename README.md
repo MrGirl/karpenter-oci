@@ -44,9 +44,11 @@ Allow any-user to use tag-namespaces in tenancy where all {request.principal.typ
 | karpenter_sh/managed-by          | the OKE cluster name                         |
 | karpenter_sh/nodepool            | the name of nodepool used to create instance |
 
-### install by helm
+### install
+replace the clusterName, clusterEndpoint, clusterDns, compartmentId, ociResourcePrincipalRegion with yours.
 ```
-helm template karpenter ./karpenter-oci --version "1.0.9" --namespace "karpenter" --set "settings.clusterName=karpenter-oci-test" --set "settings.clusterEndpoint=https://10.0.0.8:6443" --set "settings.clusterDns=10.96.5.5" --set "settings.compartmentId=ocid1.compartment.oc1..aaaaaaaa" --set "settings.ociResourcePrincipalRegion=us-ashburn-1"
+kubectl apply -f ./pkg/apis/crds/
+helm upgrade --install karpenter ./charts/karpenter --namespace "karpenter" --create-namespace --set "settings.clusterName=karpenter-oci-test" --set "settings.clusterEndpoint=https://10.0.0.8:6443" --set "settings.clusterDns=10.96.5.5" --set "settings.compartmentId=ocid1.compartment.oc1..aaaaaaaa" --set "settings.ociResourcePrincipalRegion=us-ashburn-1"
 ```
 setting details
 

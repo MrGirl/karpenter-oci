@@ -17,9 +17,9 @@ package bootstrap
 import (
 	"fmt"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
 	"knative.dev/pkg/ptr"
 	"sort"
 	"strings"

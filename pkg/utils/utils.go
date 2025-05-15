@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	"os"
 	"regexp"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"

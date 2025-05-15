@@ -18,16 +18,14 @@ import (
 	"context"
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/awslabs/operatorpkg/status"
-	"github.com/onsi/ginkgo/v2"
-	"github.com/onsi/gomega"
+	"github.com/zoom/karpenter-oci/pkg/apis"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/test"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
-	"karpenter-oci/pkg/apis"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/test"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
@@ -57,11 +55,11 @@ var recorder events.Recorder
 
 func TestProvider(t *testing.T) {
 	ctx = TestContextWithLogger(t)
-	gomega.RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "cloudProvider/OCI")
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "cloudProvider/OCI")
 }
 
-var _ = ginkgo.BeforeSuite(func() {
+var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(coretestv1alpha1.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	ctx = options.ToContext(ctx, test.Options())
@@ -75,12 +73,12 @@ var _ = ginkgo.BeforeSuite(func() {
 	prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
 })
 
-var _ = ginkgo.AfterSuite(func() {
+var _ = AfterSuite(func() {
 	stop()
-	gomega.Expect(env.Stop()).To(gomega.Succeed(), "Failed to stop environment")
+	Expect(env.Stop()).To(Succeed(), "Failed to stop environment")
 })
 
-var _ = ginkgo.BeforeEach(func() {
+var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options())
 	option := test.Options()
 	option.AvailableDomains = []string{"JPqd:US-ASHBURN-AD-1", "JPqd:US-ASHBURN-AD-2", "JPqd:US-ASHBURN-AD-3"}
@@ -92,7 +90,7 @@ var _ = ginkgo.BeforeEach(func() {
 	ociEnv.LaunchTemplateProvider.ClusterEndpoint = "https://test-cluster"
 })
 
-var _ = ginkgo.AfterEach(func() {
+var _ = AfterEach(func() {
 	ExpectCleanedUp(ctx, env.Client)
 })
 
@@ -187,7 +185,7 @@ var _ = Describe("CloudProvider", func() {
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(err).To(BeNil())
 		Expect(cloudProviderNodeClaim).ToNot(BeNil())
-		_, ok := cloudProviderNodeClaim.ObjectMeta.Annotations[v1alpha1.AnnotationOciNodeClassHash]
+		_, ok := cloudProviderNodeClaim.Annotations[v1alpha1.AnnotationOciNodeClassHash]
 		Expect(ok).To(BeTrue())
 	})
 	It("should return NodeClass Hash Version on the nodeClaim", func() {
@@ -195,7 +193,7 @@ var _ = Describe("CloudProvider", func() {
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(err).To(BeNil())
 		Expect(cloudProviderNodeClaim).ToNot(BeNil())
-		v, ok := cloudProviderNodeClaim.ObjectMeta.Annotations[v1alpha1.AnnotationOciNodeClassHashVersion]
+		v, ok := cloudProviderNodeClaim.Annotations[v1alpha1.AnnotationOciNodeClassHashVersion]
 		Expect(ok).To(BeTrue())
 		Expect(v).To(Equal(v1alpha1.OciNodeClassHashVersion))
 	})

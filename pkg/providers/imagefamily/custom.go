@@ -15,9 +15,9 @@ limitations under the License.
 package imagefamily
 
 import (
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily/bootstrap"
 	v1 "k8s.io/api/core/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
 )
 
 type Custom struct {

@@ -19,7 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"karpenter-oci/pkg/utils"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	"os"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"sigs.k8s.io/karpenter/pkg/utils/env"
@@ -43,6 +43,7 @@ type Options struct {
 	FlexCpuMemRatios        string
 	FlexCpuConstrainList    string
 	AvailableDomains        []string
+	OciAuthMethods          string
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -55,7 +56,8 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.StringVar(&o.FlexCpuMemRatios, "flex-cpu-mem-ratios", env.WithDefaultString("FLEX_CPU_MEM_RATIOS", "4"), "the ratios of vcpu and mem, eg FLEX_CPU_MEM_RATIOS=2,4, if create flex instance with 2 cores(1 ocpu), mem should be 4Gi or 8Gi")
 	fs.StringVar(&o.FlexCpuConstrainList, "flex-cpu-constrain-list", env.WithDefaultString("FLEX_CPU_CONSTRAIN_LIST", "1,2,4,8,16,32,48,64,96,128"), "to constrain the ocpu cores of flex instance, instance create in this cpu size list, ocpu is twice of vcpu")
 	fs.StringVar(&o.CompartmentId, "compartment-id", env.WithDefaultString("COMPARTMENT_ID", ""), "[REQUIRED] The compartment id to create and list instances")
-	fs.StringVar(&o.TagNamespace, "tag-namespace", env.WithDefaultString("TAG_NAMESPACE", "common-k8s"), "[REQUIRED] The tag namespace used to create and list instances")
+	fs.StringVar(&o.TagNamespace, "tag-namespace", env.WithDefaultString("TAG_NAMESPACE", "oke-karpenter-ns"), "[REQUIRED] The tag namespace used to create and list instances")
+	fs.StringVar(&o.OciAuthMethods, "oci-auth-methods", env.WithDefaultString("OCI_AUTH_METHODS", "OKE"), "[REQUIRED] the auth method to access oracle cloud resource, support OKE,API_KEY,SESSION,INSTANCE_PRINCIPAL")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

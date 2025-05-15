@@ -19,9 +19,9 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/patrickmn/go-cache"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/operator/oci/api"
-	"karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
 	"sync"
 )
 

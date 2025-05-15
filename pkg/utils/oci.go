@@ -15,10 +15,11 @@ limitations under the License.
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	"strings"
 )
 
@@ -47,7 +48,7 @@ func ConvertLaunchOptions(m *v1alpha1.LaunchOptions) (*core.LaunchOptions, error
 	}
 	ociLaunchOptions.IsConsistentVolumeNamingEnabled = lo.ToPtr(m.IsConsistentVolumeNamingEnabled)
 	if len(errMessage) > 0 {
-		return ociLaunchOptions, fmt.Errorf(strings.Join(errMessage, "\n"))
+		return ociLaunchOptions, errors.New(strings.Join(errMessage, "\n"))
 	}
 	return ociLaunchOptions, nil
 }

@@ -22,12 +22,12 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	ocicache "github.com/zoom/karpenter-oci/pkg/cache"
+	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	ocicache "karpenter-oci/pkg/cache"
-	"karpenter-oci/pkg/operator/oci/api"
-	"karpenter-oci/pkg/operator/options"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
@@ -151,7 +151,7 @@ func (p *Provider) ListInstanceType(ctx context.Context) (map[string]*WrapShape,
 		for _, shape := range shapes {
 			// metric
 			instanceTypeVCPU.With(prometheus.Labels{instanceTypeLabel: *shape.Shape.Shape}).Set(float64(shape.CalcCpu))
-			instanceTypeMemory.With(prometheus.Labels{instanceTypeLabel: *shape.Shape.Shape}).Set(float64(lo.FromPtr(shape.Shape.MemoryInGBs)) * 1024 * 1024 * 1024)
+			instanceTypeMemory.With(prometheus.Labels{instanceTypeLabel: *shape.Shape.Shape}).Set(float64(lo.FromPtr(shape.MemoryInGBs)) * 1024 * 1024 * 1024)
 
 			if wrapped, ok := wrapShapes[fmt.Sprintf("%s-%d-%d", *shape.Shape.Shape, shape.CalcCpu, shape.CalMemInGBs)]; !ok {
 				wrapShapes[fmt.Sprintf("%s-%d-%d", *shape.Shape.Shape, shape.CalcCpu, shape.CalMemInGBs)] = shape

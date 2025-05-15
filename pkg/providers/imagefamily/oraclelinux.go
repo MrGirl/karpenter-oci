@@ -15,9 +15,9 @@ limitations under the License.
 package imagefamily
 
 import (
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily/bootstrap"
 	v1 "k8s.io/api/core/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/providers/imagefamily/bootstrap"
 )
 
 type OracleOKELinux struct {
@@ -28,11 +28,11 @@ type OracleOKELinux struct {
 func (a OracleOKELinux) UserData(kubeletConfig *v1alpha1.KubeletConfiguration, taints []v1.Taint, labels map[string]string, customUserData *string, preInstallScript *string) bootstrap.Bootstrapper {
 	return bootstrap.OKE{
 		Options: bootstrap.Options{
-			ClusterName:      a.Options.ClusterName,
-			ClusterEndpoint:  a.Options.ClusterEndpoint,
-			ClusterDns:       a.Options.ClusterDns,
-			CABundle:         a.Options.CABundle,
-			BootstrapToken:   a.Options.BootstrapToken,
+			ClusterName:      a.ClusterName,
+			ClusterEndpoint:  a.ClusterEndpoint,
+			ClusterDns:       a.ClusterDns,
+			CABundle:         a.CABundle,
+			BootstrapToken:   a.BootstrapToken,
 			KubeletConfig:    kubeletConfig,
 			Taints:           taints,
 			Labels:           labels,

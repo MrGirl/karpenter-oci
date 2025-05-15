@@ -16,8 +16,8 @@ package instance
 
 import (
 	"fmt"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	v1 "k8s.io/api/core/v1"
-	"karpenter-oci/pkg/apis/v1alpha1"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"testing"
 )

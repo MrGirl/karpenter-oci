@@ -21,5 +21,5 @@ type Custom struct {
 }
 
 func (c Custom) Script() (string, error) {
-	return base64.StdEncoding.EncodeToString([]byte(*c.Options.CustomUserData)), nil
+	return base64.StdEncoding.EncodeToString([]byte(*c.CustomUserData)), nil
 }

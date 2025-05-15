@@ -21,19 +21,19 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	cloudproviderevents "github.com/zoom/karpenter-oci/pkg/cloudprovider/events"
+	"github.com/zoom/karpenter-oci/pkg/operator/options"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily"
+	"github.com/zoom/karpenter-oci/pkg/providers/instance"
+	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	cloudproviderevents "karpenter-oci/pkg/cloudprovider/events"
-	"karpenter-oci/pkg/operator/options"
-	"karpenter-oci/pkg/providers/imagefamily"
-	"karpenter-oci/pkg/providers/instance"
-	"karpenter-oci/pkg/providers/instancetype"
-	"karpenter-oci/pkg/utils"
 	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -158,6 +158,9 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *corev1.N
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("resolving node class, %w", err))
 	}
 	kubeletConfig, err := utils.GetKubletConfigurationWithNodePool(nodePool, nodeClass)
+	if err != nil {
+		return nil, err
+	}
 	instanceTypes, err := c.instanceTypeProvider.List(ctx, kubeletConfig, nodeClass)
 	if err != nil {
 		return nil, err
@@ -265,10 +268,7 @@ func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, i *core.Instanc
 			}
 		}
 		resourceFilter := func(n v1.ResourceName, v resource.Quantity) bool {
-			if resources.IsZero(v) {
-				return false
-			}
-			return true
+			return !resources.IsZero(v)
 		}
 		nodeClaim.Status.Capacity = utils.FilterMap(instanceType.Capacity, resourceFilter)
 		nodeClaim.Status.Allocatable = utils.FilterMap(instanceType.Allocatable(), resourceFilter)

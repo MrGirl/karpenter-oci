@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
-	"karpenter-oci/pkg/apis/v1alpha1"
-	"karpenter-oci/pkg/providers/imagefamily"
-	"karpenter-oci/pkg/utils"
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
+	"github.com/zoom/karpenter-oci/pkg/providers/imagefamily"
+	"github.com/zoom/karpenter-oci/pkg/utils"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"time"
 )
