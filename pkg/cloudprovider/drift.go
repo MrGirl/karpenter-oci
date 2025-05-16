@@ -49,7 +49,7 @@ func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv
 		return "", fmt.Errorf("calculating securitygroup drift, %w", err)
 	}
 
-	sgs, err := c.instanceProvider.GetSecurityGroups(ctx, vnics)
+	sgs, err := c.instanceProvider.GetSecurityGroups(ctx, vnics, true)
 	if err != nil {
 		return "", fmt.Errorf("calculating securitygroup drift, %w", err)
 	}
@@ -59,7 +59,7 @@ func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv
 	}
 
 	// get subnet
-	subnets, err := c.instanceProvider.GetSubnets(ctx, vnics)
+	subnets, err := c.instanceProvider.GetSubnets(ctx, vnics, true)
 	if err != nil {
 		return "", fmt.Errorf("calculating subnet drift, %w", err)
 	}

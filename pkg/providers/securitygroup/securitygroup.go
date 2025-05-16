@@ -69,7 +69,7 @@ func (p *Provider) List(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (
 	return sgs, nil
 }
 
-func (p *Provider) GetSecurityGroupsByInstance(ctx context.Context, vnics []core.VnicAttachment) ([]core.NetworkSecurityGroup, error) {
+func (p *Provider) GetSecurityGroups(ctx context.Context, vnics []core.VnicAttachment, onlyPrimaryVnic bool) ([]core.NetworkSecurityGroup, error) {
 
 	sgs := make([]core.NetworkSecurityGroup, 0)
 
@@ -80,6 +80,10 @@ func (p *Provider) GetSecurityGroupsByInstance(ctx context.Context, vnics []core
 		resp, err := p.client.GetVnic(ctx, getVnic)
 		if err != nil {
 			return nil, err
+		}
+
+		if onlyPrimaryVnic && (resp.IsPrimary == nil || !*resp.IsPrimary) {
+			continue
 		}
 
 		for _, nsgId := range resp.NsgIds {

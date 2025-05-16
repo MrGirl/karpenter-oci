@@ -284,12 +284,12 @@ func (p *Provider) GetVnicAttachments(ctx context.Context, instance *core.Instan
 	return resp.Items, nil
 }
 
-func (p *Provider) GetSubnets(ctx context.Context, vnics []core.VnicAttachment) ([]core.Subnet, error) {
+func (p *Provider) GetSubnets(ctx context.Context, vnics []core.VnicAttachment, onlyPrimaryNic bool) ([]core.Subnet, error) {
 
-	return p.subnetProvider.GetSubnetsByInstance(ctx, vnics)
+	return p.subnetProvider.GetSubnets(ctx, vnics, onlyPrimaryNic)
 }
 
-func (p *Provider) GetSecurityGroups(ctx context.Context, vnics []core.VnicAttachment) ([]core.NetworkSecurityGroup, error) {
+func (p *Provider) GetSecurityGroups(ctx context.Context, vnics []core.VnicAttachment, onlyPrimaryNic bool) ([]core.NetworkSecurityGroup, error) {
 
-	return p.securityGroupProvider.GetSecurityGroupsByInstance(ctx, vnics)
+	return p.securityGroupProvider.GetSecurityGroups(ctx, vnics, onlyPrimaryNic)
 }

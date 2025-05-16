@@ -41,6 +41,7 @@ var DefaultVnics = []core.Vnic{
 	{
 		Id:          common.String("ocid1.vnic.oci.iad.aaaaaa"),
 		DisplayName: common.String("nic-0"),
+		IsPrimary:   common.Bool(true),
 		SubnetId:    DefaultSubnets[0].Id,
 		NsgIds:      []string{*DefaultSecurityGroup[0].Id, *DefaultSecurityGroup[1].Id, *DefaultSecurityGroup[2].Id},
 	},

@@ -69,10 +69,28 @@ func (p *Provider) List(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (
 	return subnets, nil
 }
 
-func (p *Provider) GetSubnetsByInstance(ctx context.Context, vnics []core.VnicAttachment) ([]core.Subnet, error) {
+func (p *Provider) GetSubnets(ctx context.Context, vnics []core.VnicAttachment, onlyPrimary bool) ([]core.Subnet, error) {
 
 	subnets := make([]core.Subnet, 0)
+
+	var ifOnlyPrimary *core.GetVnicResponse
 	for _, vnic := range vnics {
+
+		if onlyPrimary {
+
+			getVnic := core.GetVnicRequest{VnicId: vnic.VnicId}
+
+			resp, err := p.client.GetVnic(ctx, getVnic)
+			if err != nil {
+				return nil, err
+			}
+
+			if resp.IsPrimary == nil || !*resp.IsPrimary {
+				ifOnlyPrimary = &resp
+				continue
+			}
+
+		}
 
 		// Create a request and dependent object(s).
 		req := core.GetSubnetRequest{
@@ -80,12 +98,16 @@ func (p *Provider) GetSubnetsByInstance(ctx context.Context, vnics []core.VnicAt
 		}
 
 		// Send the request using the service client
-		resp, err := p.client.GetSubnet(ctx, req)
+		subnetResp, err := p.client.GetSubnet(ctx, req)
 		if err != nil {
 			return nil, err
 		}
 
-		subnets = append(subnets, resp.Subnet)
+		subnets = append(subnets, subnetResp.Subnet)
+
+		if ifOnlyPrimary != nil { // if onlyPrimary
+			break
+		}
 	}
 
 	// uniq the subnets
