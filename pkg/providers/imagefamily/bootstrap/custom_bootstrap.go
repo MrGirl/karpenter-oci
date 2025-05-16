@@ -14,12 +14,15 @@ limitations under the License.
 
 package bootstrap
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"github.com/samber/lo"
+)
 
 type Custom struct {
 	Options
 }
 
 func (c Custom) Script() (string, error) {
-	return base64.StdEncoding.EncodeToString([]byte(*c.CustomUserData)), nil
+	return base64.StdEncoding.EncodeToString([]byte(lo.FromPtr(c.CustomUserData))), nil
 }
