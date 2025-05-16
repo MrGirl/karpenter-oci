@@ -217,6 +217,7 @@ func nvidiaGPUs(shape core.Shape) *resource.Quantity {
 	return resources.Quantity(fmt.Sprint(count))
 }
 
+// TODO fixme, we need to consider the maxVnic only when using native-cni
 func pods(shape *WrapShape, kc *v1alpha1.KubeletConfiguration) *resource.Quantity {
 	var count int64
 	switch {
