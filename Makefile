@@ -1,9 +1,9 @@
-CLUSTER_NAME ?= karpenter-oci-test
-CLUSTER_ENDPOINT ?= https://10.0.0.10:6443
-COMPARTMENT_ID ?= ocid1.compartment.oc1..aaaaaaaa
+CLUSTER_NAME ?= karpenter-native-cni-test
+CLUSTER_ENDPOINT ?= https://10.0.0.8:6443
+COMPARTMENT_ID ?= ocid1.compartment.oc1..aaaaaaaaoqw622q4rdi3cozo6r5ssv7md4vjcrxybtrxoc6s76qplt2d2xoa
 CLUSTER_DNS ?= 10.96.5.5
 REGION ?= us-ashburn-1
-TENANCY_NAMESPACE ?= tenantnamespace
+TENANCY_NAMESPACE ?= idkx1lfgxgf7
 ## Inject the app version into operator.Version
 LDFLAGS ?= -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(shell git describe --tags --always | cut -d"v" -f2)
 
@@ -100,7 +100,7 @@ licenses: download ## Verifies dependency licenses
 	! go-licenses csv ./... | grep -v -e 'MIT' -e 'Apache-2.0' -e 'BSD-3-Clause' -e 'BSD-2-Clause' -e 'ISC' -e 'MPL-2.0' -e 'github.com/awslabs/amazon-eks-ami/nodeadm'
 
 image: ## Build the Karpenter controller images using ko build
-	$(eval CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build --bare github.com/zoom/karpenter-oci/cmd/controller))
+	CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build --bare -t `git tag --sort=committerdate | tail -1 | cut -d"v" -f2`  github.com/zoom/karpenter-oci/cmd/controller)
 	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
 	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
 	$(eval IMG_DIGEST=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 2))

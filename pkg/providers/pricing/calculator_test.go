@@ -16,6 +16,7 @@ package pricing
 
 import (
 	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/zoom/karpenter-oci/pkg/providers/internalmodel"
 	"testing"
 	"time"
 )
@@ -65,32 +66,32 @@ func TestPrice(t *testing.T) {
 	var denseIO2_Mem float32 = 240
 
 	testCases := []struct {
-		Shape core.Shape
+		Shape *core.Shape
 		Price float32
 	}{
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape: &gpuA10,
 				Gpus:  &gpuNum,
 			},
 			Price: 8.0,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape: &b1,
 				Ocpus: &b1CpuNum,
 			},
 			Price: 1.0208,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape: &b1_1,
 				Ocpus: &b1_1CpuNum,
 			},
 			Price: 0.0638,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:                    &denseIO_E5,
 				Ocpus:                    &denseIO_E5_CpuNum,
 				MemoryInGBs:              &denseIO_E5_Mem,
@@ -99,7 +100,7 @@ func TestPrice(t *testing.T) {
 			Price: 11.90592,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &standardE2,
 				Ocpus:       &standardE2_CpuNum,
 				MemoryInGBs: &standardE2_Mem,
@@ -107,7 +108,7 @@ func TestPrice(t *testing.T) {
 			Price: 0.03,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &standardE4,
 				Ocpus:       &standardE4_CpuNum,
 				MemoryInGBs: &standardE4_Mem,
@@ -115,7 +116,7 @@ func TestPrice(t *testing.T) {
 			Price: 0.037,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &standardE6,
 				Ocpus:       &standardE6_CpuNum,
 				MemoryInGBs: &standardE6_Mem,
@@ -124,7 +125,7 @@ func TestPrice(t *testing.T) {
 		},
 
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &a1,
 				Ocpus:       &a1_CpuNum,
 				MemoryInGBs: &a1_Mem,
@@ -132,7 +133,7 @@ func TestPrice(t *testing.T) {
 			Price: 0,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &a2,
 				Ocpus:       &a2_CpuNum,
 				MemoryInGBs: &a2_Mem,
@@ -140,16 +141,16 @@ func TestPrice(t *testing.T) {
 			Price: 0.026,
 		},
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &standard3,
 				Ocpus:       &standard3_CpuNum,
 				MemoryInGBs: &standard3_Mem,
 			},
-			Price: 0.021695312,
+			Price: 0.34375,
 		},
 
 		{
-			Shape: core.Shape{
+			Shape: &core.Shape{
 				Shape:       &denseIO2,
 				Ocpus:       &denseIO2_CpuNum,
 				MemoryInGBs: &denseIO2_Mem,
@@ -163,14 +164,25 @@ func TestPrice(t *testing.T) {
 
 	var period int64 = 60 * 2
 
-	syncer := NewPriceListSyncer(endpint, period, false)
+	syncer := NewPriceListSyncer(endpint, period, true)
 	syncer.Start()
 
 	time.Sleep(18 * time.Second)
 
 	for _, tc := range testCases {
 
-		price := Calculate(tc.Shape, &syncer.PriceCatalog)
+		wrapShape := &internalmodel.WrapShape{
+			Shape: *tc.Shape,
+		}
+
+		if tc.Shape.Ocpus != nil {
+			wrapShape.CalcCpu = int64(*tc.Shape.Ocpus * 2)
+		}
+		if tc.Shape.MemoryInGBs != nil {
+			wrapShape.CalMemInGBs = int64(*tc.Shape.MemoryInGBs)
+
+		}
+		price := Calculate(wrapShape, &syncer.PriceCatalog)
 		if price != tc.Price {
 			t.Errorf("%v,expected: %+v, actual: %+v", *tc.Shape.Shape, tc.Price, price)
 		}

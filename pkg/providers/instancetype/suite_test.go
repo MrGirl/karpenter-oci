@@ -30,6 +30,7 @@ import (
 	"github.com/zoom/karpenter-oci/pkg/fake"
 	"github.com/zoom/karpenter-oci/pkg/operator/options"
 	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/providers/internalmodel"
 	"github.com/zoom/karpenter-oci/pkg/test"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -169,7 +170,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 	})
 	It("should order the instance types by price and only consider the cheapest ones", func() {
 		instances := fake.MakeInstances()
-		lo.ForEach(instances, func(item *instancetype.WrapShape, index int) {
+		lo.ForEach(instances, func(item *internalmodel.WrapShape, index int) {
 			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(item)
 		})
 
@@ -224,13 +225,13 @@ var _ = Describe("InstanceTypeProvider", func() {
 				nodeClass.Spec.Kubelet,
 				"us-ashburn-1",
 				[]string{"us-east-1"},
-				ociEnv.InstanceTypesProvider.CreateOfferings(info.Shape, sets.New[string]("us-east-1")),
+				ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 			)
 			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 31))
 		}
 	})
 	It("calculate max-pods by max MaxVnicAttachments for flex instance type", func() {
-		ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("VM.Standard.E4.Flex"),
+		ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("VM.Standard.E4.Flex"),
 			IsFlexible: common.Bool(true), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
 			NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2),
 			MaxVnicAttachmentOptions: &core.ShapeMaxVnicAttachmentOptions{
@@ -260,7 +261,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 				nodeClass.Spec.Kubelet,
 				"us-ashburn-1",
 				[]string{"us-east-1"},
-				ociEnv.InstanceTypesProvider.CreateOfferings(info.Shape, sets.New[string]("us-east-1")),
+				ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 			)
 			Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", min(int64(customMaxPod), (info.CalMaxVnic-1)*31)))
 		}
@@ -315,7 +316,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 	})
 
 	Context("Overhead", func() {
-		var info *instancetype.WrapShape
+		var info *internalmodel.WrapShape
 
 		BeforeEach(func() {
 			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
@@ -343,7 +344,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("100m"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("100Mi"))
@@ -363,7 +364,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
@@ -380,7 +381,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("70m"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("1Gi"))
@@ -406,7 +407,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.KubeReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.KubeReserved.Memory().String()).To(Equal("10Gi"))
@@ -428,7 +429,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Overhead.EvictionThreshold.Memory().String()).To(Equal("100Mi"))
 			})
@@ -447,7 +448,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", 10))
 			}
@@ -466,7 +467,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", info.CalcCpu))
 			}
@@ -486,7 +487,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					nodeClass.Spec.Kubelet,
 					"us-ashburn-1",
 					[]string{"us-east-1"},
-					ociEnv.InstanceTypesProvider.CreateOfferings(core.Shape{Shape: common.String("shape-1")}, sets.New[string]("us-east-1")),
+					ociEnv.InstanceTypesProvider.CreateOfferings(info, sets.New[string]("us-east-1")),
 				)
 				Expect(it.Capacity.Pods().Value()).To(BeNumerically("==", lo.Min([]int64{20, info.CalcCpu * 4})))
 			}
@@ -495,16 +496,16 @@ var _ = Describe("InstanceTypeProvider", func() {
 
 			// reset cache
 			ociEnv.Reset()
-			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.small"),
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("t4g.small"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(1), MemoryInGBs: common.Float32(4),
 				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
-			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.medium"),
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("t4g.medium"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
 				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
-			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("t4g.xlarge"),
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("t4g.xlarge"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(4), MemoryInGBs: common.Float32(16),
 				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
-			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("m5.large"),
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("m5.large"),
 				IsFlexible: common.Bool(false), Ocpus: common.Float32(2), MemoryInGBs: common.Float32(8),
 				NetworkingBandwidthInGbps: common.Float32(10), MaxVnicAttachments: common.Int(2)}})
 
@@ -754,7 +755,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			}))
 		})
 		It("pod should schedule one suitable flex instance type", func() {
-			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&instancetype.WrapShape{Shape: core.Shape{Shape: common.String("flex_instance"),
+			ociEnv.CmpCli.DescribeInstanceTypesOutput.Add(&internalmodel.WrapShape{Shape: core.Shape{Shape: common.String("flex_instance"),
 				IsFlexible: common.Bool(true), OcpuOptions: &core.ShapeOcpuOptions{
 					Min: common.Float32(1),
 					Max: common.Float32(16),

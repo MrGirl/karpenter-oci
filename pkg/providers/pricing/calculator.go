@@ -15,18 +15,18 @@ limitations under the License.
 package pricing
 
 import (
-	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/zoom/karpenter-oci/pkg/providers/internalmodel"
 	"math"
 	"strings"
 )
 
-func Calculate(shape core.Shape, catalog *PriceCatalog) float32 {
+func Calculate(shape *internalmodel.WrapShape, catalog *PriceCatalog) float32 {
 
 	if catalog == nil {
 
-		return 8.0*(*shape.Ocpus) + (*shape.MemoryInGBs)
+		return float32(8.0*(shape.CalcCpu/2) + (shape.CalMemInGBs))
 	}
-	items := catalog.FindPriceItems(*shape.Shape)
+	items := catalog.FindPriceItems(*shape.Shape.Shape)
 	priceLen := len(items)
 	if priceLen == 0 { // not found, so do not recommend
 		return math.MaxFloat32
@@ -42,14 +42,14 @@ func Calculate(shape core.Shape, catalog *PriceCatalog) float32 {
 		case GpuPerHour:
 			return float32(*shape.Gpus) * it.PricePerUnit()
 		case OcpuPerHour:
-			return *shape.Ocpus * it.PricePerUnit()
+			return float32(shape.CalcCpu/2) * it.PricePerUnit()
 		case GigabytePerHour:
-			return *shape.MemoryInGBs * it.PricePerUnit()
+			return float32(shape.CalMemInGBs) * it.PricePerUnit()
 		case NodePerHour:
 			if it.IsGpu() {
 				return float32(*shape.Gpus) * it.PricePerUnit()
 			} else {
-				return *shape.Ocpus * it.PricePerUnit()
+				return float32(shape.CalcCpu) * it.PricePerUnit()
 			}
 		case NVMeTerabytePerHour:
 			return *shape.LocalDisksTotalSizeInGBs * it.PricePerUnit()
@@ -60,9 +60,9 @@ func Calculate(shape core.Shape, catalog *PriceCatalog) float32 {
 		for _, item := range items {
 
 			if item.IsOcpuType() {
-				price += *shape.Ocpus * item.PricePerUnit()
+				price += float32(shape.CalcCpu/2) * item.PricePerUnit()
 			} else if item.IsMemoryType() {
-				price += *shape.MemoryInGBs * item.PricePerUnit()
+				price += float32(shape.CalMemInGBs) * item.PricePerUnit()
 			} else if item.IsNVMeType() {
 				price += *shape.LocalDisksTotalSizeInGBs / 1024 * item.PricePerUnit()
 			} else if item.IsMonthCommit() {
@@ -72,10 +72,10 @@ func Calculate(shape core.Shape, catalog *PriceCatalog) float32 {
 			} else if item.Is3YearCommit() {
 				continue
 			} else if item.IsHourlyCommit() {
-				price += *shape.Ocpus * item.PricePerUnit() / float32(item.GetCpuNum())
+				price += float32(shape.CalcCpu/2) * item.PricePerUnit()
 				break
 			} else {
-				price += *shape.Ocpus * item.PricePerUnit()
+				price += float32(shape.CalcCpu/2) * item.PricePerUnit()
 			}
 		}
 
