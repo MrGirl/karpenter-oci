@@ -23,7 +23,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
 	"github.com/zoom/karpenter-oci/pkg/operator/oci/api"
-	"github.com/zoom/karpenter-oci/pkg/providers/instancetype"
+	"github.com/zoom/karpenter-oci/pkg/providers/internalmodel"
 	"net/http"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
@@ -45,8 +45,9 @@ type CapacityPool struct {
 // CmpBehavior must be reset between tests otherwise tests will
 // pollute each other.
 type CmpBehavior struct {
+	GetImagesOutput             AtomicPtr[core.GetImageResponse]
 	ListImagesOutput            AtomicPtr[core.ListImagesResponse]
-	DescribeInstanceTypesOutput AtomicPtrSlice[instancetype.WrapShape]
+	DescribeInstanceTypesOutput AtomicPtrSlice[internalmodel.WrapShape]
 	LaunchInstanceBehavior      MockedFunction[core.LaunchInstanceRequest, core.LaunchInstanceResponse]
 	TerminateInstancesBehavior  MockedFunction[core.TerminateInstanceRequest, core.TerminateInstanceResponse]
 	GetInstanceBehavior         MockedFunction[core.GetInstanceRequest, core.GetInstanceResponse]
@@ -95,7 +96,24 @@ func (c *CmpCli) ListImages(ctx context.Context, request core.ListImagesRequest)
 			DisplayName: common.String("ubuntu")}},
 	}, nil
 }
+func (c *CmpCli) GetImage(ctx context.Context, request core.GetImageRequest) (response core.GetImageResponse, err error) {
 
+	if !c.GetImagesOutput.IsNil() {
+		getImgOutput := c.GetImagesOutput.Clone()
+		return *getImgOutput, nil
+	}
+
+	if request.ImageId == nil {
+
+		return core.GetImageResponse{}, nil
+	}
+
+	return core.GetImageResponse{
+		Image: core.Image{
+			Id: common.String("ocid1.image.oc1.iad.aaaaaaaa"),
+		},
+	}, nil
+}
 func FilterDescribeImages(images []core.Image, name string) []core.Image {
 	return lo.Filter(images, func(image core.Image, _ int) bool {
 		return *image.DisplayName == name
@@ -204,7 +222,7 @@ func (c *CmpCli) ListInstances(ctx context.Context, request core.ListInstancesRe
 func (c *CmpCli) ListShapes(ctx context.Context, request core.ListShapesRequest) (response core.ListShapesResponse, err error) {
 	items := make([]core.Shape, 0)
 	if c.DescribeInstanceTypesOutput.Len() != 0 {
-		c.DescribeInstanceTypesOutput.ForEach(func(c *instancetype.WrapShape) {
+		c.DescribeInstanceTypesOutput.ForEach(func(c *internalmodel.WrapShape) {
 			items = append(items, c.Shape)
 		})
 		return core.ListShapesResponse{

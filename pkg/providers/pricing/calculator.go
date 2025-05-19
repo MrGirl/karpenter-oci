@@ -49,7 +49,7 @@ func Calculate(shape *internalmodel.WrapShape, catalog *PriceCatalog) float32 {
 			if it.IsGpu() {
 				return float32(*shape.Gpus) * it.PricePerUnit()
 			} else {
-				return float32(shape.CalcCpu) * it.PricePerUnit()
+				return float32(shape.CalcCpu/2) * it.PricePerUnit()
 			}
 		case NVMeTerabytePerHour:
 			return *shape.LocalDisksTotalSizeInGBs * it.PricePerUnit()

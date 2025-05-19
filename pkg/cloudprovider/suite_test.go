@@ -103,7 +103,6 @@ var _ = Describe("CloudProvider", func() {
 	var nodeClass *v1alpha1.OciNodeClass
 	var nodePool *karpv1.NodePool
 	var nodeClaim *karpv1.NodeClaim
-	var instance *core.Instance
 
 	var _ = BeforeEach(func() {
 		nodeClass = test.OciNodeClass()
@@ -221,10 +220,12 @@ var _ = Describe("CloudProvider", func() {
 			instance, _ := ociEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, instanceTypes)
 
 			// update nodeclass image to shape-2
-			nodeClass.Status.Image = &v1alpha1.Image{
-				Id:            "ocid1.image.oc1.iad.shape-2",
-				Name:          "shape-2",
-				CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+			nodeClass.Status.Images = []*v1alpha1.Image{
+				{
+					Id:            "ocid1.image.oc1.iad.shape-2",
+					Name:          "shape-2",
+					CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+				},
 			}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 			reason, err := cloudProvider.isImageDrifted(ctx, nodeClaim, nodePool, instance, nodeClass)
@@ -240,10 +241,12 @@ var _ = Describe("CloudProvider", func() {
 			// Since all the capacity pools are ICEd. This should return back an ICE error
 			instance, _ := ociEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, instanceTypes)
 
-			nodeClass.Status.Image = &v1alpha1.Image{
-				Id:            "ocid1.image.oc1.iad.aaaaaaaa",
-				Name:          "shape-1",
-				CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+			nodeClass.Status.Images = []*v1alpha1.Image{
+				{
+					Id:            "ocid1.image.oc1.iad.aaaaaaaa",
+					Name:          "shape-1",
+					CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+				},
 			}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 			reason, err := cloudProvider.isImageDrifted(ctx, nodeClaim, nodePool, instance, nodeClass)
@@ -348,7 +351,7 @@ var _ = Describe("CloudProvider", func() {
 		})
 
 		It("no drift", func() {
-			CreateOciTestResource(nodePool, nodeClass, nodeClaim, instance)
+			CreateOciTestResource(nodePool, nodeClass, nodeClaim)
 			reason, err := cloudProvider.IsDrifted(ctx, nodeClaim)
 			Expect(reason).To(BeEmpty())
 			Expect(err).To(BeNil())
@@ -356,7 +359,7 @@ var _ = Describe("CloudProvider", func() {
 		})
 
 		It("drift if sg update", func() {
-			CreateOciTestResource(nodePool, nodeClass, nodeClaim, instance)
+			CreateOciTestResource(nodePool, nodeClass, nodeClaim)
 
 			nodeClass.Status.SecurityGroups = []*v1alpha1.SecurityGroup{
 				&v1alpha1.SecurityGroup{Id: *fake.DefaultSecurityGroup[0].Id},
@@ -373,12 +376,14 @@ var _ = Describe("CloudProvider", func() {
 	})
 })
 
-func CreateOciTestResource(nodePool *karpv1.NodePool, nodeClass *v1alpha1.OciNodeClass, nodeClaim *karpv1.NodeClaim, instance *core.Instance) {
+func CreateOciTestResource(nodePool *karpv1.NodePool, nodeClass *v1alpha1.OciNodeClass, nodeClaim *karpv1.NodeClaim) {
 	// create nodeClass
-	nodeClass.Status.Image = &v1alpha1.Image{
-		Id:            "ocid1.image.oc1.iad.aaaaaaaa",
-		Name:          "shape-1",
-		CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+	nodeClass.Status.Images = []*v1alpha1.Image{
+		{
+			Id:            "ocid1.image.oc1.iad.aaaaaaaa",
+			Name:          "shape-1",
+			CompartmentId: "ocid1.compartment.oc1..aaaaaaaa",
+		},
 	}
 	nodeClass.Status.Subnets = []*v1alpha1.Subnet{
 		&v1alpha1.Subnet{
@@ -405,17 +410,17 @@ func CreateOciTestResource(nodePool *karpv1.NodePool, nodeClass *v1alpha1.OciNod
 	instanceTypes = lo.Filter(instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool { return i.Name == "shape-1" })
 
 	// Since all the capacity pools are ICEd. This should return back an ICE error
-	instance, _ = ociEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, instanceTypes)
+	instance, _ := ociEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, instanceTypes)
 	nodeClaim.Status.ProviderID = *instance.Id
 	ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 }
 
 func CleanResource(nodePool *karpv1.NodePool, nodeClass *v1alpha1.OciNodeClass, nodeClaim *karpv1.NodeClaim, instance *core.Instance) {
-	env.Client.Delete(ctx, nodeClaim)
-	env.Client.Delete(ctx, nodeClass)
+	_ = env.Client.Delete(ctx, nodeClaim)
+	_ = env.Client.Delete(ctx, nodeClass)
 	// create nodeClaim
-	cloudProvider.Delete(ctx, nodeClaim)
+	_ = cloudProvider.Delete(ctx, nodeClaim)
 	if instance != nil {
-		ociEnv.InstanceProvider.Delete(ctx, *instance.Id)
+		_ = ociEnv.InstanceProvider.Delete(ctx, *instance.Id)
 	}
 }

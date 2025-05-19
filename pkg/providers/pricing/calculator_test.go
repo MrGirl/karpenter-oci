@@ -146,7 +146,7 @@ func TestPrice(t *testing.T) {
 				Ocpus:       &standard3_CpuNum,
 				MemoryInGBs: &standard3_Mem,
 			},
-			Price: 0.34375,
+			Price: 0.347125,
 		},
 
 		{
@@ -155,7 +155,7 @@ func TestPrice(t *testing.T) {
 				Ocpus:       &denseIO2_CpuNum,
 				MemoryInGBs: &denseIO2_Mem,
 			},
-			Price: 0.07498462,
+			Price: 3.8992,
 		},
 	}
 
@@ -165,7 +165,7 @@ func TestPrice(t *testing.T) {
 	var period int64 = 60 * 2
 
 	syncer := NewPriceListSyncer(endpint, period, true)
-	syncer.Start()
+	_ = syncer.Start()
 
 	time.Sleep(18 * time.Second)
 

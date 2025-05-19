@@ -337,15 +337,24 @@ func (syncer *PriceListSyncer) Get() error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Printf("failed to close http connection, %+v\n", err)
+		}
+	}(resp.Body)
 
-	body, err := io.ReadAll(resp.Body)
+	body, er := io.ReadAll(resp.Body)
+	if er != nil {
+		fmt.Printf("failed to read price list api, %+v\n", err)
+		return nil
+	}
 
 	var priceCatalog PriceCatalog
-	err = json.Unmarshal(body, &priceCatalog)
-	if err != nil {
+	er = json.Unmarshal(body, &priceCatalog)
+	if er != nil {
 		//log.Log.Error(err, "failed to decode oci price list.\n ")
-		return fmt.Errorf("failed to decode oci price list, %v", err)
+		return fmt.Errorf("failed to decode oci price list, %v", er)
 	}
 
 	syncer.PriceCatalog = priceCatalog

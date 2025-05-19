@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	AMIDrift           cloudprovider.DriftReason = "AMIDrift"
+	ImageDrift         cloudprovider.DriftReason = "ImageDrift"
 	SubnetDrift        cloudprovider.DriftReason = "SubnetDrift"
 	SecurityGroupDrift cloudprovider.DriftReason = "SecurityGroupDrift"
 	NodeClassDrift     cloudprovider.DriftReason = "NodeClassDrift"
@@ -40,9 +40,9 @@ func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv
 		return "", err
 	}
 
-	amiDrifted, err := c.isImageDrifted(ctx, nodeClaim, nodePool, instance, nodeClass)
+	imageDrifted, err := c.isImageDrifted(ctx, nodeClaim, nodePool, instance, nodeClass)
 	if err != nil {
-		return "", fmt.Errorf("calculating ami drift, %w", err)
+		return "", fmt.Errorf("calculating image drift, %w", err)
 	}
 	vnics, err := c.instanceProvider.GetVnicAttachments(ctx, instance)
 	if err != nil {
@@ -68,7 +68,7 @@ func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv
 	if err != nil {
 		return "", fmt.Errorf("calculating subnet drift, %w", err)
 	}
-	drifted := lo.FindOrElse([]cloudprovider.DriftReason{amiDrifted, securitygroupDrifted, subnetDrifted}, "", func(i cloudprovider.DriftReason) bool {
+	drifted := lo.FindOrElse([]cloudprovider.DriftReason{imageDrifted, securitygroupDrifted, subnetDrifted}, "", func(i cloudprovider.DriftReason) bool {
 		return string(i) != ""
 	})
 	return drifted, nil
@@ -86,12 +86,12 @@ func (c *CloudProvider) isImageDrifted(ctx context.Context, nodeClaim *karpv1.No
 	if !found {
 		return "", fmt.Errorf(`finding node instance type "%s"`, nodeClaim.Labels[corev1.LabelInstanceTypeStable])
 	}
-	if nodeClass.Status.Image == nil {
+	if len(nodeClass.Status.Images) == 0 {
 		return "", fmt.Errorf("no image exist given constraints")
 	}
-	mappedAMIs := imagefamily.FindCompatibleInstanceType([]*cloudprovider.InstanceType{nodeInstanceType}, []v1alpha1.Image{*nodeClass.Status.Image})
-	if !lo.Contains(lo.Keys(mappedAMIs), *instance.ImageId) {
-		return AMIDrift, nil
+	mappedImgs := imagefamily.FindCompatibleInstanceType([]*cloudprovider.InstanceType{nodeInstanceType}, nodeClass.Status.Images)
+	if !lo.Contains(lo.Keys(mappedImgs), *instance.ImageId) {
+		return ImageDrift, nil
 	}
 	return "", nil
 }

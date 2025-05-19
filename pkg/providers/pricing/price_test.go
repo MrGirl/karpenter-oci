@@ -26,7 +26,7 @@ func TestPriceListSyncer_Start(t *testing.T) {
 	var period int64 = 60 * 2
 
 	syncer := NewPriceListSyncer(endpint, period, true)
-	syncer.Start()
+	_ = syncer.Start()
 
 	time.Sleep(20 * time.Second)
 

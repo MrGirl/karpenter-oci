@@ -82,12 +82,14 @@ func (p *Provider) CreateOfferings(shape *internalmodel.WrapShape, zones sets.Se
 	for zone := range zones {
 		// exclude any offerings that have recently seen an insufficient capacity error
 		isUnavailable := p.unavailableOfferings.IsUnavailable(*shape.Shape.Shape, zone, v1.CapacityTypeOnDemand) // todo support pricing calculate
+
+		price := float64(pricing.Calculate(shape, priceCatalog))
 		offerings = append(offerings, cloudprovider.Offering{
 			Requirements: scheduling.NewRequirements(
 				scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
 				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
 			),
-			Price:     float64(pricing.Calculate(shape, priceCatalog)),
+			Price:     price,
 			Available: !isUnavailable,
 		})
 		// metric
@@ -96,6 +98,12 @@ func (p *Provider) CreateOfferings(shape *internalmodel.WrapShape, zones sets.Se
 			capacityTypeLabel: v1.CapacityTypeOnDemand,
 			zoneLabel:         zone,
 		}).Set(float64(lo.Ternary(!isUnavailable, 1, 0)))
+
+		instanceTypeOfferingPriceEstimate.With(prometheus.Labels{
+			instanceTypeLabel: fmt.Sprintf("%s_%d_%d", *shape.Shape.Shape, shape.CalcCpu/2, shape.CalMemInGBs),
+			capacityTypeLabel: v1.CapacityTypeOnDemand,
+			zoneLabel:         zone,
+		}).Set(price)
 	}
 	return offerings
 }

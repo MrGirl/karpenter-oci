@@ -20,6 +20,7 @@ import (
 )
 
 type ComputeClient interface {
+	GetImage(ctx context.Context, request core.GetImageRequest) (response core.GetImageResponse, err error)
 	ListImages(ctx context.Context, request core.ListImagesRequest) (response core.ListImagesResponse, err error)
 	LaunchInstance(ctx context.Context, request core.LaunchInstanceRequest) (response core.LaunchInstanceResponse, err error)
 	TerminateInstance(ctx context.Context, request core.TerminateInstanceRequest) (response core.TerminateInstanceResponse, err error)
