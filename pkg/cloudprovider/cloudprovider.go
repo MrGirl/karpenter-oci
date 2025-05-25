@@ -70,6 +70,33 @@ func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
 			ConditionStatus:    v1.ConditionUnknown,
 			TolerationDuration: 30 * time.Minute,
 		},
+		// Support Node Monitoring Agent Conditions
+		//
+		{
+			ConditionType:      "AcceleratedHardwareReady",
+			ConditionStatus:    v1.ConditionFalse,
+			TolerationDuration: 10 * time.Minute,
+		},
+		{
+			ConditionType:      "StorageReady",
+			ConditionStatus:    v1.ConditionFalse,
+			TolerationDuration: 30 * time.Minute,
+		},
+		{
+			ConditionType:      "NetworkingReady",
+			ConditionStatus:    v1.ConditionFalse,
+			TolerationDuration: 30 * time.Minute,
+		},
+		{
+			ConditionType:      "KernelReady",
+			ConditionStatus:    v1.ConditionFalse,
+			TolerationDuration: 30 * time.Minute,
+		},
+		{
+			ConditionType:      "ContainerRuntimeReady",
+			ConditionStatus:    v1.ConditionFalse,
+			TolerationDuration: 30 * time.Minute,
+		},
 	}
 }
 
