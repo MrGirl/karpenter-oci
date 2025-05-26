@@ -1,9 +1,9 @@
-CLUSTER_NAME ?= karpenter-native-cni-test
-CLUSTER_ENDPOINT ?= https://10.0.0.8:6443
-COMPARTMENT_ID ?= ocid1.compartment.oc1..aaaaaaaaoqw622q4rdi3cozo6r5ssv7md4vjcrxybtrxoc6s76qplt2d2xoa
+CLUSTER_NAME ?= karpenter-oci-test
+CLUSTER_ENDPOINT ?= https://10.0.0.10:6443
+COMPARTMENT_ID ?= ocid1.compartment.oc1..aaaaaaaa
 CLUSTER_DNS ?= 10.96.5.5
 REGION ?= us-ashburn-1
-TENANCY_NAMESPACE ?= idkx1lfgxgf7
+TENANCY_NAMESPACE ?= tenantnamespace
 ## Inject the app version into operator.Version
 LDFLAGS ?= -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(shell git describe --tags --always | cut -d"v" -f2)
 
@@ -76,7 +76,10 @@ deflake: ## Run randomized, racing tests until the test fails to catch flakes
 coverage:
 	go tool cover -html coverage.out -o coverage.html
 
-verify: tidy download ## Verify code. Includes dependencies, linting, formatting, etc
+verify-licence:
+	hack/make-rules/check_license.sh
+
+verify: tidy download
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
@@ -85,7 +88,7 @@ verify: tidy download ## Verify code. Includes dependencies, linting, formatting
 	hack/validation/labels.sh
 	cp pkg/apis/crds/* charts/karpenter-crd/templates
 	#hack/github/dependabot.sh
-	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
+	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run --timeout 10m $(newline))
 	@git diff --quiet ||\
 		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
 		if [ "${CI}" = true ]; then\
@@ -100,6 +103,7 @@ licenses: download ## Verifies dependency licenses
 	! go-licenses csv ./... | grep -v -e 'MIT' -e 'Apache-2.0' -e 'BSD-3-Clause' -e 'BSD-2-Clause' -e 'ISC' -e 'MPL-2.0' -e 'github.com/awslabs/amazon-eks-ami/nodeadm'
 
 image: ## Build the Karpenter controller images using ko build
+
 	$(eval CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build --bare -t `git tag --sort=committerdate | tail -1 | cut -d"v" -f2`  github.com/zoom/karpenter-oci/cmd/controller))
 	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
 	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
@@ -114,6 +118,7 @@ apply: verify image ## Deploy the controller from the current state of your git 
         --set controller.image.tag=$(IMG_TAG) \
         --set controller.image.digest=$(IMG_DIGEST)
 
+#TODO impl me
 install:  ## Deploy the latest released version into your ~/.kube/config cluster
 	@echo Upgrading to ${KARPENTER_VERSION}
 	helm upgrade --install karpenter oci://iad.ocir.io/${TENANCY_NAMESPACE}/karpenter/karpenter-oci --version ${KARPENTER_VERSION} --namespace ${KARPENTER_NAMESPACE} \
@@ -134,7 +139,7 @@ tidy: ## Recursively "go mod tidy" on all directories where go.mod exists
 download: ## Recursively "go mod download" on all directories where go.mod exists
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod download $(newline))
 
-.PHONY: help presubmit ci-test ci-non-test run test deflake coverage verify vulncheck licenses image apply install delete snapshot release tidy download
+.PHONY: help presubmit ci-test ci-non-test run test deflake coverage verify-licence verify vulncheck licenses image apply install delete snapshot release tidy download
 
 define newline
 
