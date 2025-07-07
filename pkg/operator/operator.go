@@ -18,6 +18,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"os/user"
+
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/common/auth"
 	"github.com/oracle/oci-go-sdk/v65/core"
@@ -41,8 +44,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
 	"knative.dev/pkg/ptr"
-	"os"
-	"os/user"
 	oreoperator "sigs.k8s.io/karpenter/pkg/operator"
 )
 
@@ -108,6 +109,7 @@ func NewOperator(ctx context.Context, operator *oreoperator.Operator) (context.C
 	pricingProvider := pricing.NewDefaultProvider(ctx, options.FromContext(ctx).PriceEndpoint)
 	instanceProvider := instance.NewProvider(cmpClient, subnetProvider, sgProvider, launchProvider, unavailableOfferCache)
 	instancetypeProvider := instancetype.NewProvider(region, cmpClient, cache.New(ocicache.InstanceTypesAndZonesTTL, ocicache.DefaultCleanupInterval), unavailableOfferCache, pricingProvider)
+
 	return ctx, &Operator{
 		Operator:              operator,
 		ImageProvider:         imageProvider,

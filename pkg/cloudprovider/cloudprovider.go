@@ -18,6 +18,10 @@ import (
 	"context"
 	stderr "errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
@@ -34,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	coreapis "sigs.k8s.io/karpenter/pkg/apis"
@@ -43,8 +46,6 @@ import (
 	"sigs.k8s.io/karpenter/pkg/events"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
-	"strings"
-	"time"
 )
 
 var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)

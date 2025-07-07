@@ -17,6 +17,10 @@ package instance
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	"github.com/samber/lo"
@@ -30,12 +34,9 @@ import (
 	"github.com/zoom/karpenter-oci/pkg/providers/subnet"
 	"github.com/zoom/karpenter-oci/pkg/utils"
 	v1 "k8s.io/api/core/v1"
-	"net/http"
 	corev1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
-	"strconv"
-	"strings"
 )
 
 type Provider struct {
@@ -95,7 +96,10 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1alpha1.OciNodeClass,
 	}
 	metadata := make(map[string]string, 0)
 	if nodeClass.Spec.MetaData != nil {
-		metadata = nodeClass.Spec.MetaData
+		// Create a proper copy of the map instead of just assigning the reference
+		for k, v := range nodeClass.Spec.MetaData {
+			metadata[k] = v
+		}
 	}
 	// insert max pod and subnet info
 	if metadata["oke-native-pod-networking"] == "true" {

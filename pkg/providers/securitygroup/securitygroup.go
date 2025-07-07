@@ -56,17 +56,30 @@ func (p *Provider) List(ctx context.Context, nodeClass *v1alpha1.OciNodeClass) (
 	// Create a request and dependent object(s).
 	sgs := make([]core.NetworkSecurityGroup, 0)
 	for _, selector := range nodeClass.Spec.SecurityGroupSelector {
-		req := core.ListNetworkSecurityGroupsRequest{CompartmentId: common.String(options.FromContext(ctx).CompartmentId),
-			VcnId:          common.String(nodeClass.Spec.VcnId),
-			DisplayName:    common.String(selector.Name),
-			LifecycleState: core.NetworkSecurityGroupLifecycleStateAvailable,
+		if selector.Id != "" {
+			// Get security group by ID
+			req := core.GetNetworkSecurityGroupRequest{
+				NetworkSecurityGroupId: common.String(selector.Id),
+			}
+			resp, err := p.client.GetNetworkSecurityGroup(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			sgs = append(sgs, resp.NetworkSecurityGroup)
+		} else if selector.Name != "" {
+			// List security groups by Name
+			req := core.ListNetworkSecurityGroupsRequest{CompartmentId: common.String(options.FromContext(ctx).CompartmentId),
+				VcnId:          common.String(nodeClass.Spec.VcnId),
+				DisplayName:    common.String(selector.Name),
+				LifecycleState: core.NetworkSecurityGroupLifecycleStateAvailable,
+			}
+			// Send the request using the service client
+			resp, err := p.client.ListNetworkSecurityGroups(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			sgs = append(sgs, resp.Items...)
 		}
-		// Send the request using the service client
-		resp, err := p.client.ListNetworkSecurityGroups(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		sgs = append(sgs, resp.Items...)
 	}
 	p.cache.SetDefault(fmt.Sprintf("%s:%d", nodeClass.Spec.VcnId, hash), sgs)
 	return sgs, nil

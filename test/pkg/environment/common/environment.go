@@ -17,12 +17,13 @@ package common
 import (
 	"context"
 	"fmt"
-	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 	"log"
 	"os"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/zoom/karpenter-oci/pkg/apis/v1alpha1"
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/onsi/gomega"
@@ -155,7 +156,7 @@ func (env *Environment) DefaultNodePool(nodeClass *v1alpha1.OciNodeClass) *karpv
 			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 				Key:      v1alpha1.LabelInstanceShapeName,
 				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{"VM.Standard.E4.Flex"},
+				Values:   []string{"VM.Standard.E4.Flex", "VM.Standard.E2.2", "VM.Standard.E2.4"},
 			},
 		},
 		{

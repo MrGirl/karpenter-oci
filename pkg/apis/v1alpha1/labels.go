@@ -41,15 +41,14 @@ var (
 
 	LabelNodeClass = Group + "/ocinodeclass"
 
-	LabelInstanceShapeName        = Group + "/instance-shape-name"
-	LabelInstanceCPU              = Group + "/instance-cpu"
-	LabelInstanceMemory           = Group + "/instance-memory"
-	LabelInstanceGPU              = Group + "/instance-gpu"
-	LabelInstanceGPUDescription   = Group + "/instance-gpu-description"
-	LabelInstanceNetworkBandwidth = Group + "/instance-network-bandwidth"
-	LabelInstanceMaxVNICs         = Group + "/instance-max-vnics"
-	LabelIsFlexible               = Group + "/is-flexible"
-
+	LabelInstanceShapeName            = Group + "/instance-shape-name"
+	LabelInstanceCPU                  = Group + "/instance-cpu"
+	LabelInstanceMemory               = Group + "/instance-memory"
+	LabelInstanceGPU                  = Group + "/instance-gpu"
+	LabelInstanceGPUDescription       = Group + "/instance-gpu-description"
+	LabelInstanceNetworkBandwidth     = Group + "/instance-network-bandwidth"
+	LabelInstanceMaxVNICs             = Group + "/instance-max-vnics"
+	LabelIsFlexible                   = Group + "/is-flexible"
 	AnnotationOciNodeClassHash        = Group + "/ocinodeclass-hash"
 	AnnotationOciNodeClassHashVersion = Group + "/ocinodeclass-hash-version"
 
