@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   karpenter:
   - apiVersion: v2
+    appVersion: 1.4.0
+    created: "2025-07-18T02:54:18.414614897Z"
+    description: update the karpenter-oci to 1.4.0-alpha02
+    digest: 0bf07db1ce0cd622c9ba4f858301093fa25b2022a943a7ee00a0dcf5bac2e50c
+    name: karpenter
+    type: application
+    urls:
+    - https://github.com/MrGirl/karpenter-oci/releases/download/karpenter-1.4.0/karpenter-1.4.0.tgz
+    version: 1.4.0
+  - apiVersion: v2
     appVersion: 1.4.0-alpha02
     created: "2025-07-16T07:48:59.203602531Z"
     description: update the karpenter-oci to 1.4.0-alpha02
@@ -22,6 +32,26 @@ entries:
     - https://github.com/MrGirl/karpenter-oci/releases/download/karpenter-1.0.9-build05/karpenter-1.0.9-build05.tgz
     version: 1.0.9-build05
   karpenter-crd:
+  - apiVersion: v2
+    appVersion: 1.4.0
+    created: "2025-07-18T02:54:18.534154816Z"
+    description: A Helm chart for Karpenter Custom Resource Definitions (CRDs).
+    digest: 77448de25ecab6bd5fdb76bac2dd704b75587fd71adfb86ee8dc88b739c9bda0
+    home: https://github.com/zoom/karpenter-oci/
+    icon: https://repository-images.githubusercontent.com/278480393/dab059c8-caa1-4b55-aaa7-3d30e47a5616
+    keywords:
+    - cluster
+    - node
+    - scheduler
+    - autoscaling
+    - lifecycle
+    name: karpenter-crd
+    sources:
+    - https://github.com/zoom/karpenter-oci/
+    type: application
+    urls:
+    - https://github.com/MrGirl/karpenter-oci/releases/download/karpenter-crd-1.4.0/karpenter-crd-1.4.0.tgz
+    version: 1.4.0
   - apiVersion: v2
     appVersion: 1.4.0-alpha02
     created: "2025-07-16T07:48:59.329937469Z"
@@ -62,4 +92,4 @@ entries:
     urls:
     - https://github.com/MrGirl/karpenter-oci/releases/download/karpenter-crd-1.0.9-build05/karpenter-crd-1.0.9-build05.tgz
     version: 1.0.9-build05
-generated: "2025-07-16T07:48:59.329978036Z"
+generated: "2025-07-18T02:54:18.534213997Z"
