@@ -83,6 +83,8 @@ func (p *Provider) CreateOfferings(shape *internalmodel.WrapShape, zones sets.Se
 			Requirements: scheduling.NewRequirements(
 				scheduling.NewRequirement(v1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, v1.CapacityTypeOnDemand),
 				scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
+				scheduling.NewRequirement(v1alpha1.LabelInstanceCPU, corev1.NodeSelectorOpIn, strconv.FormatInt(shape.CalcCpu, 10)),
+				scheduling.NewRequirement(v1alpha1.LabelInstanceMemory, corev1.NodeSelectorOpIn, strconv.FormatInt(shape.CalMemInGBs*1024, 10)),
 			),
 			Price:     price,
 			Available: !isUnavailable,
